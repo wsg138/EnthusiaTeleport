@@ -1,0 +1,61 @@
+# ===============================
+# EnthusiaTeleport - config.yml
+# ===============================
+
+teleport:
+  warmup-seconds: 5.0
+  cooldown-seconds: 60
+  request-expiry-seconds: 60
+  safe-search-radius: 4
+  back-max: 10
+
+  # Worlds that you are NOT allowed to teleport into.
+  # Used for things like event worlds where players
+  # shouldn't land from /tpa, /home, /rtp, etc.
+  blocked-target-worlds:
+    - surfevents
+
+combat:
+  enabled: true
+  # seconds after taking or dealing damage that teleport commands are blocked
+  tag-seconds: 30
+
+homes:
+  default-max: 2
+  rank-limits:
+    enthusia.homes.5: 5
+    enthusia.homes.10: 10
+    enthusia.homes.20: 20
+
+spawn:
+  # Always use this configured spawn for joins/respawns.
+  use-configured-spawn: true
+  world: world
+  x: 0.5
+  y: 85.5
+  z: 0.5
+  center-on-block: true
+  yaw: 0.0
+  pitch: 0.0
+
+rtp:
+  enabled: true
+  world: world
+
+  # Random X/Z bounds
+  min-x: -7500
+  max-x: 7500
+  min-z: -7500
+  max-z: 7500
+
+  # How many times players can /rtp by default (0 = no uses unless they have a rank perm)
+  max-uses-default: 0
+
+  # Rank-based overrides (like homes)
+  rank-limits:
+    enthusia.rtp.10: 10        # players with this perm get 10 uses
+    enthusia.rtp.20: 20        # etc.
+    enthusia.rtp.unlimited: -1 # -1 = unlimited uses
+
+  # How many attempts to find a safe spot before giving up
+  max-attempts: 30

@@ -1,0 +1,162 @@
+# ===============================
+# EnthusiaTeleport - messages.yml
+# ===============================
+
+# ---- Generic / errors ----
+generic.no-console: "&cOnly players can use this command."
+generic.no-permission: "&cYou do not have permission to do that."
+teleport.combat-blocked: "&cYou cannot use teleport commands while in combat."
+teleport.world-blocked:  "&cYou cannot teleport into this world."
+
+# ---- Teleport core (warmup & cooldown) ----
+teleport.warmup-start: "&eTeleporting in &6{seconds}s&e. Don't move."
+teleport.teleported: "&aTeleported."
+teleport.cooldown-active: "&cYou must wait &e{seconds}s&c before using another teleport."
+teleport.failed: "&cYour teleport was blocked by another plugin or server rule."
+
+teleport.warmup-cancelled-move: "&cTeleport cancelled because you moved."
+teleport.warmup-cancelled-move-other: "&e{player}'s teleport to you was cancelled because they moved."
+teleport.warmup-cancelled-damage: "&cTeleport cancelled because you took damage."
+teleport.warmup-cancelled-damage-other: "&e{player}'s teleport to you was cancelled because they took damage."
+
+# Sent to the anchor (player being teleported to) when their spot was unsafe
+teleport.anchor-unsafe: "&eYour location was unsafe, so &6{teleporter}&e was teleported to the nearest safe spot."
+teleport.teleported-to-player: "&aTeleported to &e{target}&a."
+teleport.teleported-from-player: "&e{teleporter} &ateleported to you."
+
+# ---- /back ----
+back.none: "&cYou do not have any back locations saved."
+back.invalid: "&cYour last back location is no longer available."
+
+# ---- TPA system ----
+teleport.request.to-self: "&cYou cannot send a teleport request to yourself."
+teleport.request.player-not-found: "&cPlayer &e{target}&c is not online."
+teleport.request.already-outgoing: "&cYou already have a pending teleport request to &e{target}&c."
+teleport.request.already-incoming: "&cYou already have a pending teleport request from &e{sender}&c." # currently unused, but kept
+teleport.request.ignored-sender: "&c{target} is ignoring your teleport requests."
+
+# /tpa <player>
+teleport.request.tpa-sent: "&aTeleport request sent to &e{target}&a. They have &e{seconds}s&a to accept."
+teleport.request.to-receiver: "&e{sender} &ahas requested to teleport to you."
+teleport.request.to-receiver-extra: "&7Use &e/tpaccept {sender}&7 to accept, &e/tpadeny {sender}&7 to deny. &8(Expires in {seconds}s)"
+
+# /tpahere <player>
+teleport.request.tpa-here-sent: "&aTeleport-here request sent to &e{target}&a. They have &e{seconds}s&a to accept."
+teleport.request.to-receiver-here: "&e{sender} &ahas requested that you teleport to them."
+teleport.request.to-receiver-here-extra: "&7Use &e/tpaccept {sender}&7 to accept, &e/tpadeny {sender}&7 to deny. &8(Expires in {seconds}s)"
+
+# Accept / deny / cancel / expiry
+teleport.no-pending: "&cYou do not have any pending teleport requests."
+teleport.no-pending-from: "&cYou do not have any pending teleport requests from &e{sender}&c."
+
+teleport.expired-request-sender: "&cYour teleport request to &e{target}&c has expired."
+teleport.expired-request-receiver: "&cThe teleport request from &e{sender}&c has expired."
+teleport.requester-offline: "&cThe player who sent you a teleport request is no longer online."
+
+# When /tpaccept is used
+teleport.accepted-to-teleporter: "&aYour teleport with &e{other}&a was accepted. Teleporting in &e{seconds}s&a."
+teleport.accepted-to-anchor: "&e{teleporter} &awill be teleported to you in &e{seconds}s&a."
+
+# When /tpadeny is used
+teleport.denied-target: "&aYou denied the teleport request."
+teleport.denied-requester: "&c{target} denied your teleport request."
+
+# When /tpacancel is used
+teleport.cancelled-requester: "&aYou cancelled your pending teleport request(s)."
+teleport.cancelled-target: "&e{sender}&c cancelled their teleport request."
+
+# ---- /tpignore ----
+ignore.toggle-on: "&eYou will now &cignore &eteleport requests from &6{target}&e."
+ignore.toggle-off: "&eYou will now &areceive &eteleport requests from &6{target}&e."
+ignore.list-header: "&6You are ignoring teleport requests from:"
+ignore.list-entry: "&7- &e{player}"
+ignore.list-empty: "&7You are not ignoring any teleport requests."
+
+# ---- /spawn ----
+spawn.warmup-start: "&eTeleporting to spawn in &6{seconds}s&e. Don't move."
+spawn.teleported: "&aTeleported to spawn."
+
+# ---- /bed ----
+bed.not-set: "&cYou do not have a bed spawn set."
+bed.missing: "&cYour bed is missing or obstructed."
+bed.warmup-start: "&eTeleporting to your bed in &6{seconds}s&e. Don't move."
+
+# ---- Homes (/sethome, /home, /delhome) ----
+home.no-homes: "&cYou do not have any homes set."
+home.limit-reached: "&cYou have reached your home limit (&e{limit}&c)."
+home.set.success: "&aSet home &e{name}&a."
+home.set.duplicate: "&cYou already have a home named &e{name}&c."
+home.unknown: "&cUnknown home: &e{name}&c."
+home.unsafe-current-location: "&cYou cannot set a home here; this location is unsafe."
+home.deleted: "&aDeleted home &e{name}&a."
+
+# When a saved home is unsafe (liquid / void / suffocation):
+# The code attaches a click event to run "/home {name} force".
+home.unsafe-teleport-warning: "&cYour home &e{name}&c is unsafe. &e[Teleport anyway]"
+
+home.gui.title: "&2Your Homes"
+home.gui.empty: "&cYou do not have any homes set."
+home.limit-select.title: "&cChoose homes to keep"
+home.limit-select.required: "&cYou have too many homes. Choose which ones to keep."
+home.limit-select.done: "&aUpdated your homes."
+
+# ---- /tppos (admin only) ----
+tppos.usage: "&cUsage: &e/tppos <x> <y> <z> [world]"
+tppos.invalid-coordinates: "&cInvalid coordinates."
+tppos.invalid-world: "&cUnknown world: &e{world}&c."
+tppos.success: "&aTeleported to &e{x} {y} {z} &ain &e{world}&a."
+
+# ---- /tpo (admin only) ----
+tpo.usage: "&cUsage: &e/tpo <player> [force]"
+tpo.player-not-found: "&cNo offline player found named &e{target}&c."
+tpo.target-online: "&c{target} is online. Use &e/tp {target}&c instead."
+tpo.unknown-location-warning: "&cNo logout location for &e{target}&c. &e[Teleport to spawn]"
+tpo.no-spawn: "&cSpawn is not configured."
+tpo.success: "&aTeleported to &e{target}&a's last location in &e{world}&a."
+
+
+# ---- Admin / reload ----
+admin.reloaded: "&aEnthusiaTeleport configuration reloaded."
+admin.player-not-found: "&cPlayer &e{target}&c not found."
+admin.homes.cleared: "&aCleared all homes for &e{target}&a."
+admin.homes.deleted: "&aDeleted home &e{name}&a for &e{target}&a."
+admin.homes.teleported: "&aTeleported to &e{target}&a's home &e{name}&a."
+admin.homes.view-usage: "&cUsage: &e/ahome <player>"
+admin.homes.no-homes: "&c{target} does not have any homes set."
+admin.homes.gui.title: "&2Homes: &e{target}"
+
+# ---- Invsee / endersee ----
+invsee.target-offline: "&cPlayer &e{target}&c is not online."
+invsee.opened-inv: "&aViewing &e{target}&a's inventory."
+invsee.opened-ender: "&aViewing &e{target}&a's ender chest."
+
+# ---- /msg /r ----
+message.usage: "&cUsage: &e/msg <player[,player2,...]> <message>"
+message.to-self: "&cYou cannot message yourself."
+message.player-offline: "&cPlayer &e{target}&c is not online."
+message.sent: "&8[&bMsg&8] &bYou &7→ &e{target}&8: &f{message}"
+message.received: "&8[&bMsg&8] &e{sender} &7→ &bYou&8: &f{message}"
+
+reply.usage: "&cUsage: &e/r <message>"
+reply.none: "&cNo one has messaged you yet."
+reply.offline: "&c{target} is no longer online."
+
+# ---- /msglog ----
+msglog.usage: "&cUsage: &e/msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]"
+msglog.view-usage: "&cUsage: &e/msglog view <index>"
+msglog.empty: "&7No messages found for that query."
+msglog.cache-expired: "&cThat list expired. Run &e/msglog&c again."
+msglog.invalid-index: "&cInvalid message index."
+msglog.header: "&8[&bMsgLog&8] &7Last &e{window}&7 &8(Page {page}/{pages})"
+msglog.context-header: "&8[&bMsgLog&8] &7Context around &e#{index}"
+
+# ---- RTP ----
+rtp.disabled: "&cRandom teleport is currently disabled."
+rtp.limit-reached: "&cYou have used all your random teleports (&e{limit}&c)."
+rtp.usage: "&cUsage: &e/rtp"
+
+# ---- /top ----
+top.teleported: "&aTeleported to the highest block above you."
+
+# ---- Misc ----
+teleport.safe-fallback-failed: "&cCould not find a safe location to teleport you."
