@@ -32,7 +32,7 @@ public class SetHomeCommand implements CommandExecutor {
             return true;
         }
 
-        String name = args[0].toLowerCase();
+        String name = args[0];
 
         HomeManager hm = plugin.getHomeManager();
 

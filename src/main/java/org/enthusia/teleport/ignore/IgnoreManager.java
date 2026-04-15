@@ -1,57 +1,28 @@
 package org.enthusia.teleport.ignore;
 
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 public class IgnoreManager {
 
     private final EnthusiaTeleportPlugin plugin;
-
-    private File file;
-    private FileConfiguration config;
-
-    // receiver -> set of senders they are ignoring
+    private final File file;
     private final Map<UUID, Set<UUID>> ignoring = new HashMap<>();
 
     public IgnoreManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
+        this.file = new File(plugin.getDataFolder(), "ignore.yml");
         load();
-    }
-
-    private void load() {
-        file = new File(plugin.getDataFolder(), "ignore.yml");
-        if (!file.exists()) {
-            try {
-                file.getParentFile().mkdirs();
-                file.createNewFile();
-            } catch (IOException ignored) {}
-        }
-
-        config = YamlConfiguration.loadConfiguration(file);
-        ignoring.clear();
-
-        for (String key : config.getKeys(false)) {
-            UUID receiver;
-            try {
-                receiver = UUID.fromString(key);
-            } catch (IllegalArgumentException ex) {
-                continue;
-            }
-
-            List<String> list = config.getStringList(key);
-            Set<UUID> senders = new HashSet<>();
-            for (String s : list) {
-                try {
-                    senders.add(UUID.fromString(s));
-                } catch (IllegalArgumentException ignored) {}
-            }
-            ignoring.put(receiver, senders);
-        }
     }
 
     public void reload() {
@@ -59,30 +30,23 @@ public class IgnoreManager {
     }
 
     public void saveAll() {
+        YamlConfiguration yaml = new YamlConfiguration();
         for (Map.Entry<UUID, Set<UUID>> entry : ignoring.entrySet()) {
-            UUID receiver = entry.getKey();
-            Set<UUID> senders = entry.getValue();
-            List<String> list = new ArrayList<>();
-            for (UUID s : senders) {
-                list.add(s.toString());
+            List<String> ignoredSenders = new ArrayList<>();
+            for (UUID sender : entry.getValue()) {
+                ignoredSenders.add(sender.toString());
             }
-            config.set(receiver.toString(), list);
+            yaml.set(entry.getKey().toString(), ignoredSenders);
         }
 
         try {
-            config.save(file);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to save ignore.yml: " + e.getMessage());
+            file.getParentFile().mkdirs();
+            yaml.save(file);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Failed to save ignore.yml: " + exception.getMessage());
         }
     }
 
-    private Set<UUID> getSet(UUID receiver) {
-        return ignoring.computeIfAbsent(receiver, k -> new HashSet<>());
-    }
-
-    /**
-     * Returns true if receiver is ignoring sender.
-     */
     public boolean isIgnoring(UUID receiver, UUID sender) {
         return getSet(receiver).contains(sender);
     }
@@ -91,15 +55,52 @@ public class IgnoreManager {
         Set<UUID> set = getSet(receiver);
         if (ignore) {
             set.add(sender);
-        } else {
-            set.remove(sender);
+            return;
+        }
+
+        set.remove(sender);
+        if (set.isEmpty()) {
+            ignoring.remove(receiver);
         }
     }
 
-    /**
-     * All players this receiver is currently ignoring.
-     */
     public Set<UUID> getIgnored(UUID receiver) {
         return new HashSet<>(getSet(receiver));
+    }
+
+    private void load() {
+        ignoring.clear();
+        if (!file.exists()) {
+            try {
+                file.getParentFile().mkdirs();
+                file.createNewFile();
+            } catch (IOException ignored) {
+            }
+        }
+
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        for (String key : yaml.getKeys(false)) {
+            UUID receiver;
+            try {
+                receiver = UUID.fromString(key);
+            } catch (IllegalArgumentException ignored) {
+                continue;
+            }
+
+            Set<UUID> senders = new HashSet<>();
+            for (String rawSender : yaml.getStringList(key)) {
+                try {
+                    senders.add(UUID.fromString(rawSender));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (!senders.isEmpty()) {
+                ignoring.put(receiver, senders);
+            }
+        }
+    }
+
+    private Set<UUID> getSet(UUID receiver) {
+        return ignoring.computeIfAbsent(receiver, unused -> new HashSet<>());
     }
 }

@@ -55,7 +55,7 @@ public class TeleportAdminCommand implements CommandExecutor {
                 }
 
                 if (action.equals("del") && args.length >= 4) {
-                    String homeName = args[3].toLowerCase();
+                    String homeName = args[3];
                     Home home = hm.getHome(target.getUniqueId(), homeName);
                     if (home == null) {
                         msg.send(sender, "home.unknown", Map.of("name", homeName));
@@ -63,7 +63,7 @@ public class TeleportAdminCommand implements CommandExecutor {
                     }
                     hm.deleteHome(target.getUniqueId(), homeName);
                     hm.saveAll();
-                    msg.send(sender, "admin.homes.deleted", Map.of("target", target.getName() == null ? targetName : target.getName(), "name", homeName));
+                    msg.send(sender, "admin.homes.deleted", Map.of("target", target.getName() == null ? targetName : target.getName(), "name", home.getName()));
                     plugin.getAdminLogManager().logHomeDelete(sender, target, home);
                     return true;
                 }
@@ -79,7 +79,7 @@ public class TeleportAdminCommand implements CommandExecutor {
                         return true;
                     }
 
-                    String homeName = args[3].toLowerCase();
+                    String homeName = args[3];
                     Home home = hm.getHome(target.getUniqueId(), homeName);
                     if (home == null) {
                         msg.send(sender, "home.unknown", Map.of("name", homeName));

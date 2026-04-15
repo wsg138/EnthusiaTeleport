@@ -75,6 +75,10 @@ public class MessageLogManager {
         lastQueryByViewer.put(viewerId, new CachedQuery(entries, System.currentTimeMillis()));
     }
 
+    public void clearCache() {
+        lastQueryByViewer.clear();
+    }
+
     public List<LogEntry> query(long startMillis,
                                 long endMillis,
                                 String from,

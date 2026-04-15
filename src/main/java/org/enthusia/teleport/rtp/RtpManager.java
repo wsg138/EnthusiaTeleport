@@ -3,50 +3,30 @@ package org.enthusia.teleport.rtp;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.config.PluginConfig;
 import org.enthusia.teleport.teleport.SafeLocationFinder;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+
+import org.bukkit.configuration.file.YamlConfiguration;
 
 public class RtpManager {
 
     private final EnthusiaTeleportPlugin plugin;
-
-    private File file;
-    private FileConfiguration config;
-
-    // uuid -> used count
+    private final File file;
     private final Map<UUID, Integer> uses = new HashMap<>();
 
     public RtpManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
+        this.file = new File(plugin.getDataFolder(), "rtp_uses.yml");
         load();
-    }
-
-    private void load() {
-        file = new File(plugin.getDataFolder(), "rtp_uses.yml");
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            } catch (IOException ignored) {}
-        }
-        config = YamlConfiguration.loadConfiguration(file);
-        uses.clear();
-
-        for (String key : config.getKeys(false)) {
-            try {
-                UUID uuid = UUID.fromString(key);
-                int count = config.getInt(key, 0);
-                uses.put(uuid, count);
-            } catch (IllegalArgumentException ignored) {}
-        }
     }
 
     public void reload() {
@@ -54,13 +34,16 @@ public class RtpManager {
     }
 
     public void saveAll() {
+        YamlConfiguration yaml = new YamlConfiguration();
         for (Map.Entry<UUID, Integer> entry : uses.entrySet()) {
-            config.set(entry.getKey().toString(), entry.getValue());
+            yaml.set(entry.getKey().toString(), entry.getValue());
         }
+
         try {
-            config.save(file);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to save rtp_uses.yml: " + e.getMessage());
+            file.getParentFile().mkdirs();
+            yaml.save(file);
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Failed to save rtp_uses.yml: " + exception.getMessage());
         }
     }
 
@@ -73,76 +56,83 @@ public class RtpManager {
     }
 
     public int getLimit(Player player) {
-        int base = plugin.getConfig().getInt("rtp.max-uses-default", 0);
-        int max = base;
-
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("rtp.rank-limits");
-        if (section != null) {
-            for (String perm : section.getKeys(false)) {
-                int value = section.getInt(perm);
-                if (player.hasPermission(perm) && value > max) {
-                    max = value;
-                }
+        PluginConfig.RtpSettings settings = plugin.getPluginConfigManager().current().rtp();
+        int max = settings.maxUsesDefault();
+        for (Map.Entry<String, Integer> entry : settings.rankLimits().entrySet()) {
+            if (player.hasPermission(entry.getKey()) && entry.getValue() > max) {
+                max = entry.getValue();
             }
         }
         return max;
     }
 
-    /**
-     * Returns true if the player can still /rtp.
-     * Limit < 0 means unlimited.
-     */
     public boolean canUse(Player player) {
         int limit = getLimit(player);
-        if (limit < 0) return true; // unlimited
-        return getUses(player.getUniqueId()) < limit;
+        return limit < 0 || getUses(player.getUniqueId()) < limit;
     }
 
-    /**
-     * Finds a random safe location within configured bounds,
-     * or null if no safe spot found within max-attempts.
-     */
     public Location findRandomLocation(Player player) {
-        if (!plugin.getConfig().getBoolean("rtp.enabled", true)) {
+        PluginConfig.RtpSettings settings = plugin.getPluginConfigManager().current().rtp();
+        if (!settings.enabled()) {
             return null;
         }
 
-        String worldName = plugin.getConfig().getString("rtp.world", "world");
-        World world = Bukkit.getWorld(worldName);
+        World world = Bukkit.getWorld(settings.world());
         if (world == null) {
-            plugin.getLogger().warning("RTP world not found: " + worldName);
+            plugin.getLogger().warning("RTP world not found: " + settings.world());
             return null;
         }
 
-        int minX = plugin.getConfig().getInt("rtp.min-x", -7500);
-        int maxX = plugin.getConfig().getInt("rtp.max-x", 7500);
-        int minZ = plugin.getConfig().getInt("rtp.min-z", -7500);
-        int maxZ = plugin.getConfig().getInt("rtp.max-z", 7500);
-        int maxAttempts = plugin.getConfig().getInt("rtp.max-attempts", 30);
-
+        int minX = Math.min(settings.minX(), settings.maxX());
+        int maxX = Math.max(settings.minX(), settings.maxX());
+        int minZ = Math.min(settings.minZ(), settings.maxZ());
+        int maxZ = Math.max(settings.minZ(), settings.maxZ());
         SafeLocationFinder safeFinder = plugin.getTeleportManager().getSafeFinder();
-        ThreadLocalRandom rng = ThreadLocalRandom.current();
+        ThreadLocalRandom random = ThreadLocalRandom.current();
 
-        for (int i = 0; i < maxAttempts; i++) {
-            int x = rng.nextInt(minX, maxX + 1);
-            int z = rng.nextInt(minZ, maxZ + 1);
-
+        for (int attempt = 0; attempt < settings.maxAttempts(); attempt++) {
+            int x = random.nextInt(minX, maxX + 1);
+            int z = random.nextInt(minZ, maxZ + 1);
             int y = world.getHighestBlockYAt(x, z) + 1;
-            Location base = new Location(
+
+            Location candidate = new Location(
                     world,
-                    x + 0.5,
+                    x + 0.5D,
                     y,
-                    z + 0.5,
+                    z + 0.5D,
                     player.getLocation().getYaw(),
                     player.getLocation().getPitch()
             );
 
-            Location safe = safeFinder.findSafeTeleportLocation(base);
-            if (safe != null) {
-                return safe;
+            if (safeFinder.isSafeTeleportLocation(candidate)) {
+                return candidate;
+            }
+
+            Location nearbySafe = safeFinder.findSafeTeleportLocation(candidate);
+            if (nearbySafe != null) {
+                return nearbySafe;
             }
         }
 
         return null;
+    }
+
+    private void load() {
+        uses.clear();
+        if (!file.exists()) {
+            try {
+                file.getParentFile().mkdirs();
+                file.createNewFile();
+            } catch (IOException ignored) {
+            }
+        }
+
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        for (String key : yaml.getKeys(false)) {
+            try {
+                uses.put(UUID.fromString(key), Math.max(0, yaml.getInt(key, 0)));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
     }
 }

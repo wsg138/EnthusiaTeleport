@@ -5,12 +5,20 @@ import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.command.*;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.inventory.*;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 import org.enthusia.teleport.invsee.InvseeHolder;
@@ -21,6 +29,11 @@ import java.util.Map;
 
 public class InventoryViewCommand implements CommandExecutor, Listener {
 
+    private static final String VIEW_PERMISSION = "enthusia.teleport.invsee";
+    private static final String EDIT_PERMISSION = "enthusia.teleport.invsee.edit";
+    private static final String ENDER_VIEW_PERMISSION = "enthusia.teleport.endersee";
+    private static final String ENDER_EDIT_PERMISSION = "enthusia.teleport.endersee.edit";
+
     private final EnthusiaTeleportPlugin plugin;
 
     public InventoryViewCommand(EnthusiaTeleportPlugin plugin) {
@@ -30,100 +43,227 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         Messages msg = plugin.getMessages();
-
         if (!(sender instanceof Player viewer)) {
             msg.send(sender, "generic.no-console");
             return true;
         }
 
         if (args.length < 1) {
-            viewer.sendMessage("§cUsage: /" + label.toLowerCase(Locale.ROOT) + " <player>");
+            viewer.sendMessage(msg.color("&cUsage: /" + label.toLowerCase(Locale.ROOT) + " <player>"));
             return true;
         }
 
-        String targetName = args[0];
-        Player target = Bukkit.getPlayerExact(targetName);
+        String commandName = cmd.getName().toLowerCase(Locale.ROOT);
+        boolean inventoryView = commandName.equals("invsee") || commandName.equals("inventorysee");
+        boolean editable = checkPermission(viewer, inventoryView);
+        if (!editable && !hasViewPermission(viewer, inventoryView)) {
+            msg.send(viewer, "generic.no-permission");
+            return true;
+        }
+
+        Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null || !target.isOnline()) {
-            msg.send(viewer, "invsee.target-offline",
-                    Map.of("target", targetName));
+            msg.send(viewer, "invsee.target-offline", Map.of("target", args[0]));
             return true;
         }
 
-        String cmdName = cmd.getName().toLowerCase(Locale.ROOT);
-
-        if (cmdName.equals("invsee") || cmdName.equals("inventorysee")) {
-            openInventoryView(viewer, target);
+        if (inventoryView) {
+            openInventoryView(viewer, target, editable);
         } else {
-            // endersee / enderview
-            openEnderView(viewer, target);
+            openEnderView(viewer, target, editable);
         }
-
         return true;
     }
 
-    // ------------------------------------------------------------------------
-    // /invsee → custom double chest with armor + offhand
-    // ------------------------------------------------------------------------
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        Inventory top = event.getView().getTopInventory();
+        if (!(top.getHolder() instanceof InvseeHolder holder)) {
+            return;
+        }
+        if (!(event.getWhoClicked() instanceof Player viewer)) {
+            return;
+        }
+        if (!holder.getViewerId().equals(viewer.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
 
-    private void openInventoryView(Player viewer, Player target) {
+        if (!holder.isEditable()) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (event.getClickedInventory() == null) {
+            return;
+        }
+
+        if (holder.getViewType() == InvseeHolder.ViewType.INVENTORY) {
+            if (isFillerSlot(event.getRawSlot())) {
+                event.setCancelled(true);
+                return;
+            }
+            if (!event.getClickedInventory().equals(top) && event.isShiftClick()) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (event.getClick() == ClickType.NUMBER_KEY || event.getClick() == ClickType.SWAP_OFFHAND) {
+            if (event.getRawSlot() >= 0 && event.getRawSlot() < top.getSize()) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (holder.getViewType() == InvseeHolder.ViewType.INVENTORY && event.getRawSlot() >= 45 && event.getRawSlot() <= 48 && event.getClickedInventory().equals(top)) {
+            ItemStack cursor = event.getCursor();
+            if (cursor != null && !cursor.getType().isAir() && !isValidArmorForSlot(event.getRawSlot(), cursor.getType())) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> syncHolder(top, holder));
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        Inventory top = event.getView().getTopInventory();
+        if (!(top.getHolder() instanceof InvseeHolder holder)) {
+            return;
+        }
+        if (!(event.getWhoClicked() instanceof Player viewer) || !holder.getViewerId().equals(viewer.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!holder.isEditable()) {
+            event.setCancelled(true);
+            return;
+        }
+        if (holder.getViewType() == InvseeHolder.ViewType.INVENTORY) {
+            for (int rawSlot : event.getRawSlots()) {
+                if (rawSlot >= event.getView().getTopInventory().getSize()) {
+                    continue;
+                }
+                if (isFillerSlot(rawSlot)) {
+                    event.setCancelled(true);
+                    return;
+                }
+                if (rawSlot >= 45 && rawSlot <= 48) {
+                    ItemStack newItem = event.getOldCursor();
+                    if (newItem != null && !newItem.getType().isAir() && !isValidArmorForSlot(rawSlot, newItem.getType())) {
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+            }
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> syncHolder(top, holder));
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Inventory top = event.getInventory();
+        if (top.getHolder() instanceof InvseeHolder holder && holder.isEditable()) {
+            syncHolder(top, holder);
+        }
+    }
+
+    private void openInventoryView(Player viewer, Player target, boolean editable) {
         Messages msg = plugin.getMessages();
-
-        String title = ChatColor.DARK_GREEN + "Inventory: " + target.getName();
         Inventory gui = Bukkit.createInventory(
-                new InvseeHolder(target.getUniqueId()),
+                new InvseeHolder(viewer.getUniqueId(), target.getUniqueId(), InvseeHolder.ViewType.INVENTORY, editable),
                 54,
-                title
+                ChatColor.DARK_GREEN + "Inventory: " + target.getName()
         );
 
-        PlayerInventory targetInv = target.getInventory();
-        boolean bedrock = isBedrock(viewer);
-
-        // Row 1: hotbar slots 0–8
-        for (int i = 0; i <= 8; i++) {
-            gui.setItem(i, safeClone(targetInv.getItem(i)));
+        PlayerInventory targetInventory = target.getInventory();
+        for (int slot = 0; slot <= 8; slot++) {
+            gui.setItem(slot, cloneOrNull(targetInventory.getItem(slot)));
+        }
+        for (int slot = 9; slot <= 35; slot++) {
+            gui.setItem(slot, cloneOrNull(targetInventory.getItem(slot)));
         }
 
-        // Rows 2–4: main inventory slots 9–35
-        for (int i = 9; i <= 35; i++) {
-            gui.setItem(i, safeClone(targetInv.getItem(i)));
+        ItemStack filler = isBedrock(viewer) ? null : createFiller();
+        for (int slot = 36; slot <= 44; slot++) {
+            gui.setItem(slot, filler);
         }
-
-        // Fill row 5 (36–44) with filler
-        ItemStack filler = bedrock ? null : createFiller();
-        for (int i = 36; i <= 44; i++) {
-            gui.setItem(i, filler);
-        }
-
-        // Row 6 (45–53):
-        // 45 boots, 46 leggings, 47 chest, 48 helmet, 49–51 filler, 52 offhand, 53 filler
-        gui.setItem(45, safeClone(targetInv.getBoots()));
-        gui.setItem(46, safeClone(targetInv.getLeggings()));
-        gui.setItem(47, safeClone(targetInv.getChestplate()));
-        gui.setItem(48, safeClone(targetInv.getHelmet()));
-
+        gui.setItem(45, cloneOrNull(targetInventory.getBoots()));
+        gui.setItem(46, cloneOrNull(targetInventory.getLeggings()));
+        gui.setItem(47, cloneOrNull(targetInventory.getChestplate()));
+        gui.setItem(48, cloneOrNull(targetInventory.getHelmet()));
         gui.setItem(49, filler);
         gui.setItem(50, filler);
         gui.setItem(51, filler);
-
-        gui.setItem(52, safeClone(targetInv.getItemInOffHand()));
+        gui.setItem(52, cloneOrNull(targetInventory.getItemInOffHand()));
         gui.setItem(53, filler);
 
         viewer.openInventory(gui);
+        sendSwapHint(viewer, msg.rawOr("invsee.opened-inv", "&aViewing &e{target}&a's inventory."), target.getName(), "/endersee " + target.getName());
+    }
 
-        // Clickable chat to jump to ender chest
-        String raw = msg.rawOr(
-                "invsee.opened-inv",
-                "&aViewing &e{target}&a's inventory. &7[&eClick to view ender chest&7]"
+    private void openEnderView(Player viewer, Player target, boolean editable) {
+        Messages msg = plugin.getMessages();
+        Inventory gui = Bukkit.createInventory(
+                new InvseeHolder(viewer.getUniqueId(), target.getUniqueId(), InvseeHolder.ViewType.ENDER_CHEST, editable),
+                target.getEnderChest().getSize(),
+                ChatColor.DARK_GREEN + "Ender Chest: " + target.getName()
         );
-        raw = raw.replace("{target}", target.getName());
+        for (int slot = 0; slot < target.getEnderChest().getSize(); slot++) {
+            gui.setItem(slot, cloneOrNull(target.getEnderChest().getItem(slot)));
+        }
+        viewer.openInventory(gui);
+        sendSwapHint(viewer, msg.rawOr("invsee.opened-ender", "&aViewing &e{target}&a's ender chest."), target.getName(), "/invsee " + target.getName());
+    }
 
-        String colored = ChatColor.translateAlternateColorCodes('&', raw);
-        TextComponent comp = new TextComponent(colored);
-        comp.setClickEvent(new ClickEvent(
-                ClickEvent.Action.RUN_COMMAND,
-                "/endersee " + target.getName()
-        ));
-        viewer.spigot().sendMessage(comp);
+    private void syncHolder(Inventory inventory, InvseeHolder holder) {
+        Player target = Bukkit.getPlayer(holder.getTargetId());
+        if (target == null || !target.isOnline()) {
+            return;
+        }
+
+        if (holder.getViewType() == InvseeHolder.ViewType.ENDER_CHEST) {
+            for (int slot = 0; slot < target.getEnderChest().getSize(); slot++) {
+                target.getEnderChest().setItem(slot, cloneOrNull(inventory.getItem(slot)));
+            }
+            return;
+        }
+
+        PlayerInventory targetInventory = target.getInventory();
+        for (int slot = 0; slot <= 8; slot++) {
+            targetInventory.setItem(slot, cloneOrNull(inventory.getItem(slot)));
+        }
+        for (int slot = 9; slot <= 35; slot++) {
+            targetInventory.setItem(slot, cloneOrNull(inventory.getItem(slot)));
+        }
+        targetInventory.setBoots(cloneOrNull(inventory.getItem(45)));
+        targetInventory.setLeggings(cloneOrNull(inventory.getItem(46)));
+        targetInventory.setChestplate(cloneOrNull(inventory.getItem(47)));
+        targetInventory.setHelmet(cloneOrNull(inventory.getItem(48)));
+        targetInventory.setItemInOffHand(cloneOrNull(inventory.getItem(52)));
+        target.updateInventory();
+    }
+
+    private boolean hasViewPermission(Player viewer, boolean inventoryView) {
+        return viewer.hasPermission(inventoryView ? VIEW_PERMISSION : ENDER_VIEW_PERMISSION);
+    }
+
+    private boolean checkPermission(Player viewer, boolean inventoryView) {
+        return viewer.hasPermission(inventoryView ? EDIT_PERMISSION : ENDER_EDIT_PERMISSION);
+    }
+
+    private void sendSwapHint(Player viewer, String rawMessage, String targetName, String command) {
+        String colored = ChatColor.translateAlternateColorCodes('&', rawMessage.replace("{target}", targetName));
+        TextComponent component = new TextComponent(colored);
+        component.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command));
+        viewer.spigot().sendMessage(component);
     }
 
     private ItemStack createFiller() {
@@ -136,77 +276,15 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
         return item;
     }
 
-    private ItemStack safeClone(ItemStack item) {
-        return item == null ? null : item.clone();
-    }
-
     private boolean isBedrock(Player player) {
-        // Floodgate/Geyser bedrock players use the "*" prefix by default
         return player.getName().startsWith("*");
     }
 
-    // ------------------------------------------------------------------------
-    // /endersee → just open real ender chest
-    // ------------------------------------------------------------------------
-
-    private void openEnderView(Player viewer, Player target) {
-        Messages msg = plugin.getMessages();
-
-        viewer.openInventory(target.getEnderChest());
-
-        String raw = msg.rawOr(
-                "invsee.opened-ender",
-                "&aViewing &e{target}&a's ender chest. &7[&eClick to view inventory&7]"
-        );
-        raw = raw.replace("{target}", target.getName());
-
-        String colored = ChatColor.translateAlternateColorCodes('&', raw);
-        TextComponent comp = new TextComponent(colored);
-        comp.setClickEvent(new ClickEvent(
-                ClickEvent.Action.RUN_COMMAND,
-                "/invsee " + target.getName()
-        ));
-        viewer.spigot().sendMessage(comp);
-    }
-
-    // ------------------------------------------------------------------------
-    // Listener: handle clicks in our custom /invsee GUI
-    // ------------------------------------------------------------------------
-
-    @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
-        Inventory top = event.getView().getTopInventory();
-        if (!(top.getHolder() instanceof InvseeHolder holder)) return;
-
-        // We only care about this /invsee GUI
-        if (!(event.getWhoClicked() instanceof Player viewer)) return;
-
-        Inventory clickedInv = event.getClickedInventory();
-        if (clickedInv == null) return;
-
-        int slot = event.getRawSlot(); // top inventory slots = 0–53
-
-        // Armor restriction on direct clicks into armor slots
-        if (slot >= 45 && slot <= 48 && clickedInv.equals(top)) {
-            ItemStack cursor = event.getCursor();
-            if (cursor != null && !cursor.getType().isAir()) {
-                if (!isValidArmorForSlot(slot, cursor.getType())) {
-                    event.setCancelled(true);
-                    return;
-                }
-            }
+    private boolean isValidArmorForSlot(int slot, Material material) {
+        if (material.isAir()) {
+            return true;
         }
-
-        // Let Bukkit handle the click, then sync GUI -> target
-        Bukkit.getScheduler().runTask(plugin, () -> syncToTarget(holder, top));
-
-        // We do NOT cancel the event (except for bad armor), so editing works.
-    }
-
-    private boolean isValidArmorForSlot(int slot, Material mat) {
-        if (mat.isAir()) return true; // allow clearing slot
-
-        String name = mat.name();
+        String name = material.name();
         return switch (slot) {
             case 45 -> name.endsWith("_BOOTS");
             case 46 -> name.endsWith("_LEGGINGS");
@@ -216,32 +294,11 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
         };
     }
 
-    private void syncToTarget(InvseeHolder holder, Inventory gui) {
-        Player target = Bukkit.getPlayer(holder.getTargetId());
-        if (target == null || !target.isOnline()) {
-            return;
-        }
+    private boolean isFillerSlot(int slot) {
+        return (slot >= 36 && slot <= 44) || slot == 49 || slot == 50 || slot == 51 || slot == 53;
+    }
 
-        PlayerInventory inv = target.getInventory();
-
-        // Hotbar 0–8
-        for (int i = 0; i <= 8; i++) {
-            inv.setItem(i, gui.getItem(i));
-        }
-
-        // Main inventory 9–35
-        for (int i = 9; i <= 35; i++) {
-            inv.setItem(i, gui.getItem(i));
-        }
-
-        // Armor & offhand
-        inv.setBoots(gui.getItem(45));
-        inv.setLeggings(gui.getItem(46));
-        inv.setChestplate(gui.getItem(47));
-        inv.setHelmet(gui.getItem(48));
-
-        inv.setItemInOffHand(gui.getItem(52));
-
-        target.updateInventory();
+    private ItemStack cloneOrNull(ItemStack itemStack) {
+        return itemStack == null ? null : itemStack.clone();
     }
 }

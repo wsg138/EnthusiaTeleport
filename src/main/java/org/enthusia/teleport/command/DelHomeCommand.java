@@ -31,7 +31,7 @@ public class DelHomeCommand implements CommandExecutor {
             return true;
         }
 
-        String name = args[0].toLowerCase();
+        String name = args[0];
 
         HomeManager hm = plugin.getHomeManager();
         Home home = hm.getHome(player.getUniqueId(), name);
@@ -42,7 +42,7 @@ public class DelHomeCommand implements CommandExecutor {
 
         hm.deleteHome(player.getUniqueId(), name);
         hm.saveAll();
-        msg.send(player, "home.deleted", Map.of("name", name));
+        msg.send(player, "home.deleted", Map.of("name", home.getName()));
         return true;
     }
 }

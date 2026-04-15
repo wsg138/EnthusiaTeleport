@@ -9,7 +9,8 @@ import java.util.UUID;
 public class Home {
 
     private final UUID owner;
-    private final String name; // stored lower-case
+    private final String key;
+    private final String name;
     private final String worldName;
     private final double x;
     private final double y;
@@ -18,10 +19,11 @@ public class Home {
     private final float pitch;
     private final long createdAt;
 
-    public Home(UUID owner, String name, String worldName,
+    public Home(UUID owner, String key, String name, String worldName,
                 double x, double y, double z,
                 float yaw, float pitch, long createdAt) {
         this.owner = owner;
+        this.key = key;
         this.name = name;
         this.worldName = worldName;
         this.x = x;
@@ -34,6 +36,10 @@ public class Home {
 
     public UUID getOwner() {
         return owner;
+    }
+
+    public String getKey() {
+        return key;
     }
 
     public String getName() {

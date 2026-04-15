@@ -43,7 +43,7 @@ public class HomeCommand implements CommandExecutor {
         }
 
         // /home <name> [force]
-        String name = args[0].toLowerCase();
+        String name = args[0];
         boolean force = args.length >= 2 && args[1].equalsIgnoreCase("force");
 
         plugin.getHomeGuiManager().teleportToHome(player, name, force);

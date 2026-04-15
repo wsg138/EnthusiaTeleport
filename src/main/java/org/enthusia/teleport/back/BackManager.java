@@ -2,6 +2,9 @@ package org.enthusia.teleport.back;
 
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import java.util.ArrayDeque;
@@ -10,7 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public class BackManager {
+public class BackManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
     private final Map<UUID, Deque<Location>> history = new HashMap<>();
@@ -22,7 +25,7 @@ public class BackManager {
     }
 
     public void reload() {
-        this.maxEntries = Math.max(0, plugin.getConfig().getInt("teleport.back-max", 10));
+        this.maxEntries = plugin.getPluginConfigManager().current().teleport().backMax();
     }
 
     public void record(Player player, Location from) {
@@ -65,6 +68,11 @@ public class BackManager {
     public void remove(UUID playerId) {
         if (playerId == null) return;
         history.remove(playerId);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        remove(event.getPlayer().getUniqueId());
     }
 
     private boolean sameBlock(Location a, Location b) {

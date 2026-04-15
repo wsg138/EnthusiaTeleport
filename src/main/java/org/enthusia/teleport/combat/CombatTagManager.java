@@ -29,8 +29,8 @@ public class CombatTagManager implements Listener {
     }
 
     public void reload() {
-        this.enabled = plugin.getConfig().getBoolean("combat.enabled", true);
-        int seconds = plugin.getConfig().getInt("combat.tag-seconds", 30);
+        this.enabled = plugin.getPluginConfigManager().current().combat().enabled();
+        int seconds = plugin.getPluginConfigManager().current().combat().tagSeconds();
         this.tagMillis = seconds * 1000L;
         // Re-hook in case CombatLogX was added/removed or reloaded.
         this.combatLogXHook.tryHook();

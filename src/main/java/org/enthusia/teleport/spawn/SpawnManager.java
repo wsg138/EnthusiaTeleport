@@ -11,12 +11,12 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.config.PluginConfig;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
-/**
- * Handles spawn location lookups and first-time join perks.
- */
 public class SpawnManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -26,8 +26,8 @@ public class SpawnManager implements Listener {
     }
 
     public Location getSpawnLocation() {
-        String worldName = plugin.getConfig().getString("spawn.world", "world");
-        World world = Bukkit.getWorld(worldName);
+        PluginConfig.SpawnSettings settings = plugin.getPluginConfigManager().current().spawn();
+        World world = Bukkit.getWorld(settings.world());
         if (world == null) {
             if (Bukkit.getWorlds().isEmpty()) {
                 return null;
@@ -35,48 +35,77 @@ public class SpawnManager implements Listener {
             world = Bukkit.getWorlds().get(0);
         }
 
-        boolean centerOnBlock = plugin.getConfig().getBoolean("spawn.center-on-block", true);
+        if (!settings.useConfiguredSpawn()) {
+            return world.getSpawnLocation();
+        }
 
-        double x = center(plugin.getConfig().getDouble("spawn.x", 0.5), centerOnBlock);
-        double y = plugin.getConfig().getDouble("spawn.y", 64.0);
-        double z = center(plugin.getConfig().getDouble("spawn.z", 0.5), centerOnBlock);
-        float yaw = (float) plugin.getConfig().getDouble("spawn.yaw", 0.0);
-        float pitch = (float) plugin.getConfig().getDouble("spawn.pitch", 0.0);
-
-        return new Location(world, x, y, z, yaw, pitch);
-    }
-
-    private double center(double coord, boolean centerOnBlock) {
-        if (!centerOnBlock) return coord;
-        if (Math.abs(coord - Math.round(coord)) > 1e-9) return coord;
-        return Math.round(coord) + 0.5;
+        double x = center(settings.x(), settings.centerOnBlock());
+        double z = center(settings.z(), settings.centerOnBlock());
+        return new Location(world, x, settings.y(), z, settings.yaw(), settings.pitch());
     }
 
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
+        if (!plugin.getPluginConfigManager().current().spawn().respawnOverrideEnabled()) {
+            return;
+        }
+
         Location spawn = getSpawnLocation();
-        if (spawn == null) return;
-        event.setRespawnLocation(spawn);
+        if (spawn != null) {
+            event.setRespawnLocation(spawn);
+        }
     }
 
     @EventHandler
     public void onFirstJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (player.hasPlayedBefore()) return;
-
-        Location spawn = getSpawnLocation();
-        if (spawn != null) {
-            player.teleport(spawn);
-            player.setBedSpawnLocation(spawn, true);
+        if (player.hasPlayedBefore()) {
+            return;
         }
 
-        ItemStack steak = new ItemStack(Material.COOKED_BEEF, 8);
-        ItemStack sword = new ItemStack(Material.STONE_SWORD);
-        ItemStack axe = new ItemStack(Material.STONE_AXE);
-        ItemStack shovel = new ItemStack(Material.STONE_SHOVEL);
-        ItemStack pickaxe = new ItemStack(Material.STONE_PICKAXE);
+        PluginConfig.SpawnSettings settings = plugin.getPluginConfigManager().current().spawn();
+        Location spawn = getSpawnLocation();
 
-        Arrays.asList(steak, sword, axe, shovel, pickaxe)
-                .forEach(item -> player.getInventory().addItem(item));
+        if (settings.firstJoinTeleportEnabled() && spawn != null) {
+            player.teleport(spawn);
+        }
+        if (settings.firstJoinSetBedSpawn() && spawn != null) {
+            player.setBedSpawnLocation(spawn, true);
+        }
+        if (settings.firstJoinKitEnabled()) {
+            giveStarterKit(player, settings);
+        }
+    }
+
+    private void giveStarterKit(Player player, PluginConfig.SpawnSettings settings) {
+        if (settings.firstJoinKitClearInventory()) {
+            player.getInventory().clear();
+        }
+        for (ItemStack item : resolveStarterKit(settings)) {
+            player.getInventory().addItem(item);
+        }
+    }
+
+    private List<ItemStack> resolveStarterKit(PluginConfig.SpawnSettings settings) {
+        List<ItemStack> items = new ArrayList<>();
+        for (PluginConfig.KitItem kitItem : settings.starterKitItems()) {
+            Material material = Material.matchMaterial(kitItem.material().toUpperCase(Locale.ROOT));
+            if (material == null || material.isAir()) {
+                plugin.getLogger().warning("Ignoring invalid starter kit material: " + kitItem.material());
+                continue;
+            }
+            items.add(new ItemStack(material, kitItem.amount()));
+        }
+        return items;
+    }
+
+    private double center(double value, boolean centerOnBlock) {
+        if (!centerOnBlock) {
+            return value;
+        }
+        if (Math.abs(value - Math.round(value)) > 1.0E-9D) {
+            return value;
+        }
+        return Math.round(value) + 0.5D;
     }
 }

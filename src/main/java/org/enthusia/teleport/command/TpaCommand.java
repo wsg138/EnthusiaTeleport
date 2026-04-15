@@ -67,7 +67,7 @@ public class TpaCommand implements CommandExecutor {
         TeleportRequestType type = here ? TeleportRequestType.TPA_HERE : TeleportRequestType.TPA;
         reqMgr.createRequest(player, target, type);
 
-        int expirySeconds = plugin.getConfig().getInt("teleport.request-expiry-seconds", 60);
+        int expirySeconds = plugin.getPluginConfigManager().current().teleport().requestExpirySeconds();
 
         if (here) {
             msg.send(player, "teleport.request.tpa-here-sent",

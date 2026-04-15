@@ -65,6 +65,22 @@ public class SafeLocationFinder {
         return best;
     }
 
+    public boolean isSafeTeleportLocation(Location loc) {
+        if (loc == null || loc.getWorld() == null) return false;
+        World world = loc.getWorld();
+        int x = loc.getBlockX();
+        int y = loc.getBlockY();
+        int z = loc.getBlockZ();
+
+        Block feet = world.getBlockAt(x, y, z);
+        Block head = feet.getRelative(BlockFace.UP);
+        Block below = feet.getRelative(BlockFace.DOWN);
+
+        return isPassableForTeleport(feet.getType())
+                && isPassableForTeleport(head.getType())
+                && isSolidGroundForTeleport(below.getType());
+    }
+
     private boolean isPassableForTeleport(Material mat) {
         if (mat.isAir()) return true;
 

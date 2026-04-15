@@ -27,7 +27,7 @@ public class RtpCommand implements CommandExecutor {
             return true;
         }
 
-        if (!plugin.getConfig().getBoolean("rtp.enabled", true)) {
+        if (!plugin.getPluginConfigManager().current().rtp().enabled()) {
             msg.send(player, "rtp.disabled");
             return true;
         }

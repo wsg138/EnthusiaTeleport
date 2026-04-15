@@ -1,13 +1,12 @@
 name: EnthusiaTeleport
 main: org.enthusia.teleport.EnthusiaTeleportPlugin
-version: 1.0.0
+version: 1.1.0
 api-version: "1.21"
 author: Lincoln
-description: Clean Essentials-style teleport + invsee replacement with warmups, cooldowns and API.
+description: Teleport, home, spawn, messaging, and staff utility plugin for Enthusia.
 softdepend: [CombatLogX]
 
 commands:
-  # --- TPA system ---
   tpa:
     description: Send a teleport request to another player.
     usage: /tpa <player>
@@ -17,7 +16,6 @@ commands:
     description: Alias for /tpa.
     usage: /tpask <player>
     permission: enthusia.teleport.tpa
-    aliases: [tpa]
 
   tpahere:
     description: Request another player to teleport to you.
@@ -44,7 +42,6 @@ commands:
     usage: /tpignore <player|list>
     permission: enthusia.teleport.tpignore
 
-  # --- Homes ---
   sethome:
     description: Set a home at your current location.
     usage: /sethome <name>
@@ -65,7 +62,6 @@ commands:
     usage: /bed
     permission: enthusia.teleport.bed
 
-  # --- Spawn / coords ---
   spawn:
     description: Teleport to the server spawn.
     usage: /spawn
@@ -77,13 +73,12 @@ commands:
     permission: enthusia.teleport.tppos
 
   tpo:
-    description: Teleport to an offline player's last location.
+    description: Teleport to an offline player's last known location.
     usage: /tpo <player> [force]
     permission: enthusia.teleport.tpo
 
-  # --- Inventory viewing ---
   invsee:
-    description: View and edit another player's inventory.
+    description: View another player's inventory.
     usage: /invsee <player>
     permission: enthusia.teleport.invsee
 
@@ -94,7 +89,7 @@ commands:
     aliases: [invsee]
 
   endersee:
-    description: View and edit another player's ender chest.
+    description: View another player's ender chest.
     usage: /endersee <player>
     permission: enthusia.teleport.endersee
 
@@ -104,7 +99,6 @@ commands:
     permission: enthusia.teleport.endersee
     aliases: [endersee]
 
-  # --- Utility teleports ---
   rtp:
     description: Random teleport within the configured world.
     usage: /rtp
@@ -120,7 +114,6 @@ commands:
     usage: /back
     permission: enthusia.teleport.back
 
-  # --- Messaging ---
   msg:
     description: Send a private message to one or more players.
     usage: /msg <player[,player2,...]> <message>
@@ -137,11 +130,11 @@ commands:
     usage: /msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]
     permission: enthusia.teleport.msglog
 
-  # --- Admin ---
   eteleport:
-    description: EnthusiaTeleport admin command (reload).
+    description: EnthusiaTeleport admin command.
     usage: /eteleport reload|homes clear|homes del|homes tp
     permission: enthusia.teleport.admin
+
   ahome:
     description: View and manage another player's homes.
     usage: /ahome <player>
@@ -149,9 +142,8 @@ commands:
     aliases: [adminhome]
 
 permissions:
-  # Player-facing teleport stuff (excluding /rtp by design)
   enthusia.teleport.*:
-    description: All EnthusiaTeleport player teleport commands.
+    description: All core player teleport commands.
     default: true
     children:
       enthusia.teleport.tpa: true
@@ -168,14 +160,15 @@ permissions:
       enthusia.teleport.msg: true
       enthusia.teleport.reply: true
 
-  # Admin / staff
   enthusia.teleport.admin:
     description: Admin commands for EnthusiaTeleport.
     default: op
     children:
       enthusia.teleport.tppos: true
       enthusia.teleport.invsee: true
+      enthusia.teleport.invsee.edit: true
       enthusia.teleport.endersee: true
+      enthusia.teleport.endersee.edit: true
       enthusia.teleport.top: true
       enthusia.teleport.rtp: true
       enthusia.teleport.back: true
@@ -187,8 +180,8 @@ permissions:
       enthusia.teleport.admin.homes.delete: true
       enthusia.teleport.bypass-teleport: true
       enthusia.teleport.bypass-world-block: true
+      enthusia.teleport.bypass-combat: true
 
-  # Individual perms (in case you want fine-grain)
   enthusia.teleport.tpa:
     default: true
   enthusia.teleport.tpahere:
@@ -201,7 +194,6 @@ permissions:
     default: true
   enthusia.teleport.tpignore:
     default: true
-
   enthusia.teleport.sethome:
     default: true
   enthusia.teleport.home:
@@ -212,67 +204,60 @@ permissions:
     default: true
   enthusia.teleport.spawn:
     default: true
-
   enthusia.teleport.msg:
     default: true
-
   enthusia.teleport.reply:
     default: true
 
   enthusia.teleport.msglog:
     default: op
-
   enthusia.teleport.tppos:
     default: op
-
   enthusia.teleport.tpo:
     default: op
-
   enthusia.teleport.invsee:
-    description: Use /invsee.
+    description: View another player's inventory.
     default: op
-
+  enthusia.teleport.invsee.edit:
+    description: Edit another player's inventory while using /invsee.
+    default: op
   enthusia.teleport.endersee:
-    description: Use /endersee.
+    description: View another player's ender chest.
     default: op
-
+  enthusia.teleport.endersee.edit:
+    description: Edit another player's ender chest while using /endersee.
+    default: op
   enthusia.teleport.rtp:
-    description: Use /rtp (not given by default).
+    description: Use /rtp.
     default: false
-
   enthusia.teleport.top:
     description: Use /top.
     default: op
-
   enthusia.teleport.back:
     description: Use /back.
     default: op
-
   enthusia.teleport.bypass-combat:
     description: Bypass teleport combat restriction.
     default: op
-
   enthusia.teleport.bypass-teleport:
     description: Bypass teleport warmups and cooldowns.
     default: op
-
   enthusia.teleport.bypass-world-block:
-    description: Bypass blocked target-world restrictions for teleports.
+    description: Bypass blocked target-world restrictions.
     default: op
-
+  enthusia.teleport.admin.reload:
+    description: Reload the plugin.
+    default: op
   enthusia.teleport.admin.homes.teleport:
-    description: Teleport to another player's home via /ahome or /eteleport homes tp.
+    description: Teleport to another player's home.
     default: op
-
   enthusia.teleport.admin.homes.view:
-    description: View another player's homes via /ahome.
+    description: View another player's homes.
     default: op
-
   enthusia.teleport.admin.homes.delete:
-    description: Delete another player's home via /ahome.
+    description: Delete another player's home.
     default: op
 
-  # Home limit perms – used only in config homes.rank-limits
   enthusia.homes.5:
     default: false
   enthusia.homes.10:
@@ -280,7 +265,6 @@ permissions:
   enthusia.homes.20:
     default: false
 
-  # RTP limit perms – used only in config rtp.rank-limits
   enthusia.rtp.10:
     default: false
   enthusia.rtp.20:

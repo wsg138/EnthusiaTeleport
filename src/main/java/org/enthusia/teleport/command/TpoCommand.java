@@ -1,11 +1,11 @@
 package org.enthusia.teleport.command;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.OfflinePlayer;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -52,45 +52,36 @@ public class TpoCommand implements CommandExecutor {
             return true;
         }
 
-        Location loc = target.getLocation();
-        if (loc == null || loc.getWorld() == null) {
+        Location destination = plugin.getLastLocationManager().getLastLocation(target);
+        if (destination == null || destination.getWorld() == null) {
             if (!force) {
-                String raw = msg.rawOr(
-                        "tpo.unknown-location-warning",
-                        "&cNo logout location for &e{target}&c. &e[Teleport to spawn]"
-                );
-                raw = raw.replace("{target}", target.getName());
-                String colored = ChatColor.translateAlternateColorCodes('&', raw);
-                TextComponent comp = new TextComponent(colored);
-                comp.setClickEvent(new ClickEvent(
-                        ClickEvent.Action.RUN_COMMAND,
-                        "/tpo " + target.getName() + " force"
-                ));
-                player.spigot().sendMessage(comp);
+                String raw = msg.rawOr("tpo.unknown-location-warning", "&cNo logout location for &e{target}&c. &e[Teleport to spawn]");
+                raw = raw.replace("{target}", target.getName() == null ? targetName : target.getName());
+                TextComponent component = new TextComponent(ChatColor.translateAlternateColorCodes('&', raw));
+                component.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/tpo " + targetName + " force"));
+                player.spigot().sendMessage(component);
                 return true;
             }
 
-            loc = plugin.getSpawnManager().getSpawnLocation();
-            if (loc == null || loc.getWorld() == null) {
+            destination = plugin.getSpawnManager().getSpawnLocation();
+            if (destination == null || destination.getWorld() == null) {
                 msg.send(player, "tpo.no-spawn");
                 return true;
             }
         }
 
-        TeleportManager tpMgr = plugin.getTeleportManager();
-        tpMgr.startTeleport(
+        plugin.getTeleportManager().startTeleport(
                 player,
-                loc,
+                destination,
                 true,
                 null,
                 "teleport.warmup-start",
                 null,
                 TeleportManager.TeleportFlags.instant()
         );
-
         msg.send(player, "tpo.success", Map.of(
-                "target", target.getName(),
-                "world", loc.getWorld().getName()
+                "target", target.getName() == null ? targetName : target.getName(),
+                "world", destination.getWorld().getName()
         ));
         return true;
     }
