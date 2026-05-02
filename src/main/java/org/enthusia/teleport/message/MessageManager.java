@@ -52,7 +52,7 @@ public class MessageManager {
                 Map.of("target", recipient.getName(), "message", message));
         messages.send(recipient, "message.received",
                 Map.of("sender", sender.getName(), "message", message));
-        recipient.playSound(recipient.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.1f);
+        recipient.playSound(recipient.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f);
         recordIncoming(recipient, sender);
         logManager.logMsg(sender, java.util.List.of(recipient), message);
     }
