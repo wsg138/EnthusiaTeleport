@@ -8,7 +8,7 @@
 
     <groupId>org.enthusia</groupId>
     <artifactId>enthusia-teleport</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
     <packaging>jar</packaging>
 
     <name>EnthusiaTeleport</name>
@@ -42,6 +42,7 @@
     </dependencies>
 
     <build>
+        <finalName>EnthusiaTeleport-${project.version}</finalName>
         <plugins>
             <!-- Compile with Java 21 -->
             <plugin>

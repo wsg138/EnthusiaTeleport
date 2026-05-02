@@ -16,7 +16,7 @@ public class SafeLocationFinder {
 
     /**
      * Used for live teleports (tpa, spawn, rtp, etc.).
-     * Water is allowed, lava is not, need solid block under feet.
+     * Water is allowed, lava is not, need solid ground or water at feet.
      */
     public Location findSafeTeleportLocation(Location target) {
         if (target == null || target.getWorld() == null) return null;
@@ -42,7 +42,7 @@ public class SafeLocationFinder {
 
                     if (!isPassableForTeleport(feet.getType())) continue;
                     if (!isPassableForTeleport(head.getType())) continue;
-                    if (!isSolidGroundForTeleport(below.getType())) continue;
+                    if (!isSupportedForTeleport(feet.getType(), below.getType())) continue;
 
                     Location candidate = new Location(
                             world,
@@ -78,27 +78,36 @@ public class SafeLocationFinder {
 
         return isPassableForTeleport(feet.getType())
                 && isPassableForTeleport(head.getType())
-                && isSolidGroundForTeleport(below.getType());
+                && isSupportedForTeleport(feet.getType(), below.getType());
     }
 
     private boolean isPassableForTeleport(Material mat) {
+        if (mat == Material.LAVA) return false;
         if (mat.isAir()) return true;
 
         // allow water-y stuff for teleports
-        if (mat == Material.WATER
-                || mat == Material.KELP
-                || mat == Material.KELP_PLANT
-                || mat == Material.SEAGRASS
-                || mat == Material.TALL_SEAGRASS) {
+        if (isWaterSafeForTeleport(mat)) {
             return true;
         }
 
         return !mat.isSolid();
     }
 
+    private boolean isSupportedForTeleport(Material feet, Material below) {
+        return isSolidGroundForTeleport(below) || isWaterSafeForTeleport(feet);
+    }
+
     private boolean isSolidGroundForTeleport(Material mat) {
         if (mat == Material.LAVA || mat == Material.WATER) return false;
         return mat.isSolid();
+    }
+
+    private boolean isWaterSafeForTeleport(Material mat) {
+        return mat == Material.WATER
+                || mat == Material.KELP
+                || mat == Material.KELP_PLANT
+                || mat == Material.SEAGRASS
+                || mat == Material.TALL_SEAGRASS;
     }
 
     /**
