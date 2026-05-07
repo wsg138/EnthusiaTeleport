@@ -13,6 +13,8 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.Map;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class TpCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -220,7 +222,7 @@ public class TpCommand implements CommandExecutor {
         Player partial = Bukkit.getPlayer(name);
         if (partial != null) return partial;
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getName().equalsIgnoreCase(name)) {
+            if (ignoresEqualCase(player.getName(), name)) {
                 return player;
             }
         }

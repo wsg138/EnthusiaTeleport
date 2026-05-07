@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class TpIgnoreCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -36,7 +38,7 @@ public class TpIgnoreCommand implements CommandExecutor {
             return true;
         }
 
-        if (args[0].equalsIgnoreCase("list")) {
+        if (ignoresEqualCase(args[0], "list")) {
             Set<UUID> ignored = ignoreMgr.getIgnored(player.getUniqueId());
             if (ignored.isEmpty()) {
                 msg.send(player, "ignore.list-empty");

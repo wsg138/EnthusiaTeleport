@@ -1,11 +1,9 @@
 package org.enthusia.teleport.command;
 
-import org.bukkit.Location;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 import org.enthusia.teleport.rtp.RtpManager;
-import org.enthusia.teleport.teleport.TeleportManager;
 import org.enthusia.teleport.util.Messages;
 
 import java.util.Map;
@@ -46,25 +44,7 @@ public class RtpCommand implements CommandExecutor {
             return true;
         }
 
-        Location loc = rtp.findRandomLocation(player);
-        if (loc == null) {
-            msg.send(player, "teleport.safe-fallback-failed");
-            return true;
-        }
-
-        TeleportManager tpMgr = plugin.getTeleportManager();
-
-        // Use standard warmup + cooldown, but only count an RTP use
-        // if the teleport actually completes successfully.
-        tpMgr.startTeleport(
-                player,
-                loc,
-                false, // already safe, no extra safe-search needed
-                null,
-                "teleport.warmup-start",
-                () -> rtp.incrementUse(player.getUniqueId())
-        );
-
+        rtp.enqueue(player);
         return true;
     }
 }

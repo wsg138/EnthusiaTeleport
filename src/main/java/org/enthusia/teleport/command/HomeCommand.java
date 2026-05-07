@@ -8,6 +8,8 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.Map;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class HomeCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -44,7 +46,7 @@ public class HomeCommand implements CommandExecutor {
 
         // /home <name> [force]
         String name = args[0];
-        boolean force = args.length >= 2 && args[1].equalsIgnoreCase("force");
+        boolean force = args.length >= 2 && ignoresEqualCase(args[1], "force");
 
         plugin.getHomeGuiManager().teleportToHome(player, name, force);
         return true;

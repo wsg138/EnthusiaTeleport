@@ -15,6 +15,8 @@ import org.enthusia.teleport.request.TeleportRequestManager;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class TeleportTabCompleter implements TabCompleter {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -30,67 +32,74 @@ public class TeleportTabCompleter implements TabCompleter {
             String alias,
             String[] args
     ) {
-        String name = command.getName().toLowerCase(Locale.ROOT);
+        String name = command.getName();
 
-        switch (name) {
-            // TPA / tpask / tpahere
-            case "tpa":
-            case "tpask":
-            case "tpahere":
-                return tabPlayers(sender, args, 0);
-
-            // /tpaccept [player], /tpadeny [player]
-            case "tpaccept":
-            case "tpadeny":
-                return tabIncomingRequests(sender, args, 0);
-
-            // /tpignore <player|list>
-            case "tpignore":
-                return tabTpIgnore(sender, args);
-
-            // Homes
-            case "home":
-                return tabHome(sender, args);
-            case "delhome":
-                return tabDelHome(sender, args);
-            case "sethome":
-                // no suggestions for new home names
-                return Collections.emptyList();
-
-            // Inventory viewing
-            case "invsee":
-            case "inventorysee":
-            case "endersee":
-            case "enderview":
-                return tabPlayers(sender, args, 0);
-
-            // /msg <player[,player2,...]>
-            case "msg":
-                return tabMsgTargets(sender, args);
-
-            // /msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]
-            case "msglog":
-                return tabMsgLog(args);
-
-            // /tppos <x> <y> <z> [world]
-            case "tppos":
-                return tabTppos(sender, args);
-
-            // /tpo <offline-player>
-            case "tpo":
-                return tabOfflinePlayers(args);
-
-            // /eteleport reload
-            case "eteleport":
-                return tabEteleport(args);
-            case "ahome":
-            case "adminhome":
-                return tabAdminHome(args);
-
-            // /rtp, /top, /spawn, /tpacancel -> no args, so nothing special
-            default:
-                return Collections.emptyList();
+        // TPA / tpask / tpahere
+        if (ignoresEqualCase(name, "tpa")
+                || ignoresEqualCase(name, "tpask")
+                || ignoresEqualCase(name, "tpahere")) {
+            return tabPlayers(sender, args, 0);
         }
+
+        // /tpaccept [player], /tpadeny [player]
+        if (ignoresEqualCase(name, "tpaccept") || ignoresEqualCase(name, "tpadeny")) {
+            return tabIncomingRequests(sender, args, 0);
+        }
+
+        // /tpignore <player|list>
+        if (ignoresEqualCase(name, "tpignore")) {
+            return tabTpIgnore(sender, args);
+        }
+
+        // Homes
+        if (ignoresEqualCase(name, "home")) {
+            return tabHome(sender, args);
+        }
+        if (ignoresEqualCase(name, "delhome")) {
+            return tabDelHome(sender, args);
+        }
+        if (ignoresEqualCase(name, "sethome")) {
+            return Collections.emptyList();
+        }
+
+        // Inventory viewing
+        if (ignoresEqualCase(name, "invsee")
+                || ignoresEqualCase(name, "inventorysee")
+                || ignoresEqualCase(name, "endersee")
+                || ignoresEqualCase(name, "enderview")) {
+            return tabPlayers(sender, args, 0);
+        }
+
+        // /msg <player[,player2,...]>
+        if (ignoresEqualCase(name, "msg")) {
+            return tabMsgTargets(sender, args);
+        }
+
+        // /msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]
+        if (ignoresEqualCase(name, "msglog")) {
+            return tabMsgLog(args);
+        }
+
+        // /tppos <x> <y> <z> [world]
+        if (ignoresEqualCase(name, "tppos")) {
+            return tabTppos(sender, args);
+        }
+
+        // /tpo <offline-player>
+        if (ignoresEqualCase(name, "tpo")) {
+            return tabOfflinePlayers(args);
+        }
+
+        // /eteleport reload
+        if (ignoresEqualCase(name, "eteleport")) {
+            return tabEteleport(args);
+        }
+        if (ignoresEqualCase(name, "ahome") || ignoresEqualCase(name, "adminhome")) {
+            return tabAdminHome(args);
+        }
+
+        // /rtp, /top, /spawn, /tpacancel -> no args, so nothing special
+        return Collections.emptyList();
     }
 
     // ---------------------------------------------------------------------
@@ -231,7 +240,7 @@ public class TeleportTabCompleter implements TabCompleter {
             return Arrays.asList("10m", "30m", "1h", "6h", "1d", "view");
         }
 
-        if (args.length >= 2 && "view".equalsIgnoreCase(args[0])) {
+        if (args.length >= 2 && ignoresEqualCase(args[0], "view")) {
             return Collections.emptyList();
         }
 
@@ -244,13 +253,8 @@ public class TeleportTabCompleter implements TabCompleter {
 
         if (args.length >= 2) {
             String prev = args[args.length - 2];
-            if (prev.equalsIgnoreCase("--from") || prev.equalsIgnoreCase("--to")) {
-                return Arrays.stream(Bukkit.getOfflinePlayers())
-                        .map(OfflinePlayer::getName)
-                        .filter(Objects::nonNull)
-                        .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(last.toLowerCase(Locale.ROOT)))
-                        .sorted(String.CASE_INSENSITIVE_ORDER)
-                        .collect(Collectors.toList());
+            if (ignoresEqualCase(prev, "--from") || ignoresEqualCase(prev, "--to")) {
+                return plugin.getOfflineNameCache().suggest(last, false);
             }
         }
 
@@ -271,14 +275,7 @@ public class TeleportTabCompleter implements TabCompleter {
         if (args.length != 1) return Collections.emptyList();
 
         String prefix = args[0].toLowerCase(Locale.ROOT);
-        return Arrays.stream(Bukkit.getOfflinePlayers())
-                .filter(p -> !p.isOnline())
-                .filter(OfflinePlayer::hasPlayedBefore)
-                .map(OfflinePlayer::getName)
-                .filter(Objects::nonNull)
-                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .collect(Collectors.toList());
+        return plugin.getOfflineNameCache().suggest(prefix, true);
     }
 
     private List<String> tabIncomingRequests(CommandSender sender, String[] args, int argIndex) {
@@ -303,12 +300,12 @@ public class TeleportTabCompleter implements TabCompleter {
     private List<String> tabEteleport(String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
-            List<String> options = Arrays.asList("reload", "homes");
+            List<String> options = Arrays.asList("reload", "performance", "homes");
             return options.stream()
                     .filter(opt -> opt.startsWith(prefix))
                     .collect(Collectors.toList());
         }
-        if (args.length >= 2 && "homes".equalsIgnoreCase(args[0])) {
+        if (args.length >= 2 && ignoresEqualCase(args[0], "homes")) {
             String actionPrefix = args[1].toLowerCase(Locale.ROOT);
             if (args.length == 2) {
                 List<String> actions = Arrays.asList("clear", "del", "tp");
@@ -319,16 +316,10 @@ public class TeleportTabCompleter implements TabCompleter {
 
             if (args.length == 3) {
                 String prefix = args[2].toLowerCase(Locale.ROOT);
-                return Arrays.stream(Bukkit.getOfflinePlayers())
-                        .filter(p -> p.isOnline() || p.hasPlayedBefore())
-                        .map(OfflinePlayer::getName)
-                        .filter(Objects::nonNull)
-                        .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
-                        .sorted(String.CASE_INSENSITIVE_ORDER)
-                        .collect(Collectors.toList());
+                return plugin.getOfflineNameCache().suggest(prefix, false);
             }
 
-            if (args.length == 4 && ("del".equalsIgnoreCase(args[1]) || "tp".equalsIgnoreCase(args[1]))) {
+            if (args.length == 4 && (ignoresEqualCase(args[1], "del") || ignoresEqualCase(args[1], "tp"))) {
                 OfflinePlayer target = Bukkit.getOfflinePlayer(args[2]);
                 if (target == null || (!target.isOnline() && !target.hasPlayedBefore())) {
                     return Collections.emptyList();
@@ -348,12 +339,6 @@ public class TeleportTabCompleter implements TabCompleter {
     private List<String> tabAdminHome(String[] args) {
         if (args.length != 1) return Collections.emptyList();
         String prefix = args[0].toLowerCase(Locale.ROOT);
-        return Arrays.stream(Bukkit.getOfflinePlayers())
-                .filter(p -> p.isOnline() || p.hasPlayedBefore())
-                .map(OfflinePlayer::getName)
-                .filter(Objects::nonNull)
-                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .collect(Collectors.toList());
+        return plugin.getOfflineNameCache().suggest(prefix, false);
     }
 }

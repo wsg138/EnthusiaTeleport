@@ -1,5 +1,6 @@
 package org.enthusia.teleport.log;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -17,6 +18,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class AdminLogManager {
 
@@ -26,6 +31,7 @@ public class AdminLogManager {
     private final EnthusiaTeleportPlugin plugin;
     private final Path logDir;
     private final Object writeLock = new Object();
+    private final Queue<AdminLogEntry> queue = new ConcurrentLinkedQueue<>();
 
     public AdminLogManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -33,15 +39,15 @@ public class AdminLogManager {
     }
 
     public void logHomeTeleport(CommandSender actor, OfflinePlayer target, Home home, Location dest) {
-        writeEntry("home_teleport", actor, target, home, dest);
+        queueEntry("home_teleport", actor, target, home, dest);
     }
 
     public void logHomeDelete(CommandSender actor, OfflinePlayer target, Home home) {
         Location loc = home != null ? home.toLocation() : null;
-        writeEntry("home_delete", actor, target, home, loc);
+        queueEntry("home_delete", actor, target, home, loc);
     }
 
-    private void writeEntry(String action, CommandSender actor, OfflinePlayer target, Home home, Location loc) {
+    private void queueEntry(String action, CommandSender actor, OfflinePlayer target, Home home, Location loc) {
         long now = System.currentTimeMillis();
         String iso = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).format(TS_FORMAT);
         String actorName = actor != null ? actor.getName() : "unknown";
@@ -56,22 +62,69 @@ public class AdminLogManager {
                 + "|" + sanitize(targetName) + "|" + sanitize(homeName)
                 + "|" + sanitize(world) + "|" + x + "|" + y + "|" + z;
 
+        int maxQueueSize = plugin.getPluginConfigManager().current().logging().maxQueueSize();
+        if (queue.size() >= maxQueueSize) {
+            plugin.getPerformanceMonitor().increment("logs.admin.dropped");
+            return;
+        }
+        queue.add(new AdminLogEntry(now, line));
+        plugin.getPerformanceMonitor().increment("logs.admin.queued");
+    }
+
+    public void flushQueuedAsync() {
+        List<AdminLogEntry> drained = drainQueue();
+        if (drained.isEmpty()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> writeEntries(drained));
+    }
+
+    public void flushBlocking() {
+        List<AdminLogEntry> drained = drainQueue();
+        if (!drained.isEmpty()) {
+            writeEntries(drained);
+        }
+    }
+
+    private List<AdminLogEntry> drainQueue() {
+        List<AdminLogEntry> drained = new ArrayList<>();
+        AdminLogEntry entry;
+        while ((entry = queue.poll()) != null) {
+            drained.add(entry);
+        }
+        plugin.getPerformanceMonitor().add("logs.admin.queue_size", queue.size());
+        return drained;
+    }
+
+    private void writeEntries(List<AdminLogEntry> entries) {
         try {
             Files.createDirectories(logDir);
-            Path file = logDir.resolve("admin-" + LocalDate.now().format(DATE_FORMAT) + ".log");
             synchronized (writeLock) {
-                try (BufferedWriter writer = Files.newBufferedWriter(
-                        file,
-                        StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.APPEND
-                )) {
-                    writer.write(line);
-                    writer.newLine();
+                java.util.Map<Path, List<String>> byFile = new java.util.LinkedHashMap<>();
+                ZoneId zone = ZoneId.systemDefault();
+                for (AdminLogEntry entry : entries) {
+                    LocalDate date = Instant.ofEpochMilli(entry.timestamp()).atZone(zone).toLocalDate();
+                    Path file = logDir.resolve("admin-" + date.format(DATE_FORMAT) + ".log");
+                    byFile.computeIfAbsent(file, unused -> new ArrayList<>()).add(entry.line());
+                }
+                for (java.util.Map.Entry<Path, List<String>> fileEntry : byFile.entrySet()) {
+                    try (BufferedWriter writer = Files.newBufferedWriter(
+                            fileEntry.getKey(),
+                            StandardCharsets.UTF_8,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.APPEND
+                    )) {
+                        for (String line : fileEntry.getValue()) {
+                            writer.write(line);
+                            writer.newLine();
+                        }
+                    }
                 }
             }
+            plugin.getPerformanceMonitor().add("logs.admin.flushed", entries.size());
         } catch (IOException e) {
             plugin.getLogger().warning("Failed to write admin log: " + e.getMessage());
+            plugin.getPerformanceMonitor().add("logs.admin.failed", entries.size());
         }
     }
 
@@ -82,5 +135,8 @@ public class AdminLogManager {
 
     private String format(double value) {
         return String.format(Locale.US, "%.2f", value);
+    }
+
+    private record AdminLogEntry(long timestamp, String line) {
     }
 }

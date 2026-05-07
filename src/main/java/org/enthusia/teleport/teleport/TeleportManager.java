@@ -252,6 +252,9 @@ public class TeleportManager implements TeleportApi, Listener {
         }
 
         active.task.cancel();
+        if (reason != null) {
+            plugin.getPerformanceMonitor().increment("teleport.warmup_cancelled." + reason.name().toLowerCase(java.util.Locale.ROOT));
+        }
         Player player = Bukkit.getPlayer(playerId);
         if (player == null || reason == null) {
             return;

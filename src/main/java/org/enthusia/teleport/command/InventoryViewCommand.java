@@ -26,6 +26,10 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
+
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
 
 public class InventoryViewCommand implements CommandExecutor, Listener {
 
@@ -35,6 +39,7 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
     private static final String ENDER_EDIT_PERMISSION = "enthusia.teleport.endersee.edit";
 
     private final EnthusiaTeleportPlugin plugin;
+    private final Set<String> pendingSyncs = new HashSet<>();
 
     public InventoryViewCommand(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -53,8 +58,9 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
             return true;
         }
 
-        String commandName = cmd.getName().toLowerCase(Locale.ROOT);
-        boolean inventoryView = commandName.equals("invsee") || commandName.equals("inventorysee");
+        String commandName = cmd.getName();
+        boolean inventoryView = ignoresEqualCase(commandName, "invsee")
+                || ignoresEqualCase(commandName, "inventorysee");
         boolean editable = checkPermission(viewer, inventoryView);
         if (!editable && !hasViewPermission(viewer, inventoryView)) {
             msg.send(viewer, "generic.no-permission");
@@ -129,7 +135,7 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
             }
         }
 
-        Bukkit.getScheduler().runTask(plugin, () -> syncHolder(top, holder));
+        scheduleSync(top, holder);
     }
 
     @EventHandler
@@ -164,15 +170,33 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
                 }
             }
         }
-        Bukkit.getScheduler().runTask(plugin, () -> syncHolder(top, holder));
+        scheduleSync(top, holder);
     }
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         Inventory top = event.getInventory();
         if (top.getHolder() instanceof InvseeHolder holder && holder.isEditable()) {
+            pendingSyncs.remove(syncKey(holder));
             syncHolder(top, holder);
         }
+    }
+
+    private void scheduleSync(Inventory inventory, InvseeHolder holder) {
+        String key = syncKey(holder);
+        if (!pendingSyncs.add(key)) {
+            plugin.getPerformanceMonitor().increment("invsee.syncs_coalesced");
+            return;
+        }
+        plugin.getPerformanceMonitor().increment("invsee.syncs_queued");
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            pendingSyncs.remove(key);
+            syncHolder(inventory, holder);
+        });
+    }
+
+    private String syncKey(InvseeHolder holder) {
+        return holder.getViewerId() + ":" + holder.getTargetId() + ":" + holder.getViewType();
     }
 
     private void openInventoryView(Player viewer, Player target, boolean editable) {
@@ -228,6 +252,7 @@ public class InventoryViewCommand implements CommandExecutor, Listener {
         if (target == null || !target.isOnline()) {
             return;
         }
+        plugin.getPerformanceMonitor().increment("invsee.syncs_flushed");
 
         if (holder.getViewType() == InvseeHolder.ViewType.ENDER_CHEST) {
             for (int slot = 0; slot < target.getEnderChest().getSize(); slot++) {

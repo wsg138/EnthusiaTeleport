@@ -2,6 +2,8 @@
 # EnthusiaTeleport - messages.yml
 # ===============================
 
+config-version: 2
+
 generic.no-console: "&cOnly players can use this command."
 generic.no-permission: "&cYou do not have permission to do that."
 
@@ -123,6 +125,9 @@ reply.offline: "&c{target} is no longer online."
 msglog.usage: "&cUsage: &e/msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]"
 msglog.view-usage: "&cUsage: &e/msglog view <index>"
 msglog.empty: "&7No messages found for that query."
+msglog.searching: "&7Searching message logs..."
+msglog.too-large: "&cThat query is too large. Try a shorter duration."
+msglog.failed: "&cMessage log search failed or timed out."
 msglog.cache-expired: "&cThat list expired. Run &e/msglog&c again."
 msglog.invalid-index: "&cInvalid message index."
 msglog.header: "&8[&bMsgLog&8] &7Last &e{window}&7 &8(Page {page}/{pages})"
@@ -131,5 +136,10 @@ msglog.context-header: "&8[&bMsgLog&8] &7Context around &e#{index}"
 rtp.disabled: "&cRandom teleport is currently disabled."
 rtp.limit-reached: "&cYou have used all your random teleports (&e{limit}&c)."
 rtp.usage: "&cUsage: &e/rtp"
+rtp.search-queued: "&eSearching for a safe random location..."
+rtp.search-timeout: "&cCould not find a safe random location in time. Please try again."
 
 top.teleported: "&aTeleported to the highest block above you."
+
+performance.header: "&8[&bEnthusiaTeleport&8] &7Performance counters:"
+performance.line: "&7{key}: &e{value}"

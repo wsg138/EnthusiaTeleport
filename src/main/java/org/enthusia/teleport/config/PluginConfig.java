@@ -5,11 +5,18 @@ import java.util.Map;
 import java.util.Set;
 
 public record PluginConfig(
+        int configVersion,
         TeleportSettings teleport,
         CombatSettings combat,
         HomeSettings homes,
         SpawnSettings spawn,
-        RtpSettings rtp
+        RtpSettings rtp,
+        PersistenceSettings persistence,
+        LoggingSettings logging,
+        MsgLogSettings msgLog,
+        LastLocationBackstopSettings lastLocationBackstop,
+        TabCacheSettings tabCache,
+        DebugSettings debug
 ) {
 
     public record TeleportSettings(
@@ -67,7 +74,70 @@ public record PluginConfig(
             int maxZ,
             int maxUsesDefault,
             Map<String, Integer> rankLimits,
-            int maxAttempts
+            int maxAttempts,
+            QueueSettings queue,
+            SpacingSettings spacing,
+            SafetySettings safety
+    ) {
+    }
+
+    public record QueueSettings(
+            boolean enabled,
+            int maxActiveSearches,
+            int maxLocationChecksPerTick,
+            int maxChunkLoadRequestsPerSecond,
+            int timeoutSeconds
+    ) {
+    }
+
+    public record SpacingSettings(
+            double minDistanceFromSpawn,
+            double minDistanceFromPlayers,
+            double minDistanceFromRecentRtp,
+            int recentRtpMemoryMinutes
+    ) {
+    }
+
+    public record SafetySettings(
+            int maxAttemptsPerPlayer,
+            int safeSearchRadius
+    ) {
+    }
+
+    public record PersistenceSettings(
+            int flushIntervalSeconds
+    ) {
+    }
+
+    public record LoggingSettings(
+            int flushIntervalSeconds,
+            int maxQueueSize
+    ) {
+    }
+
+    public record MsgLogSettings(
+            int maxDaysScanned,
+            int maxResults,
+            int timeoutSeconds
+    ) {
+    }
+
+    public record LastLocationBackstopSettings(
+            int intervalMinutes,
+            int maxPlayersPerTick,
+            boolean repairEnabled,
+            boolean debugLogging
+    ) {
+    }
+
+    public record TabCacheSettings(
+            int refreshIntervalSeconds
+    ) {
+    }
+
+    public record DebugSettings(
+            boolean performanceEnabled,
+            int performanceLogIntervalSeconds
     ) {
     }
 }

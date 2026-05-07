@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class MsgCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -54,7 +56,7 @@ public class MsgCommand implements CommandExecutor {
 
         List<Player> recipients = new ArrayList<>();
         for (String name : targets) {
-            if (name.equalsIgnoreCase(player.getName())) {
+            if (ignoresEqualCase(name, player.getName())) {
                 msg.send(player, "message.to-self");
                 continue;
             }

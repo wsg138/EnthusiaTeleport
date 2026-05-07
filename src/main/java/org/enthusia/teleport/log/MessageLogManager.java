@@ -1,7 +1,7 @@
 package org.enthusia.teleport.log;
 
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.Bukkit;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import java.io.BufferedReader;
@@ -43,12 +43,16 @@ public class MessageLogManager {
         }
     }
 
+    public record QueryResult(List<LogEntry> entries, int filesScanned, long linesRead, long durationMillis) {
+    }
+
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final EnthusiaTeleportPlugin plugin;
     private final Path logDir;
     private final Object writeLock = new Object();
     private final Map<UUID, CachedQuery> lastQueryByViewer = new HashMap<>();
+    private final Queue<LogEntry> queue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     public MessageLogManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -60,11 +64,11 @@ public class MessageLogManager {
                 .map(Player::getName)
                 .filter(Objects::nonNull)
                 .toList();
-        writeEntry(new LogEntry(System.currentTimeMillis(), "msg", sender.getName(), names, message));
+        queueEntry(new LogEntry(System.currentTimeMillis(), "msg", sender.getName(), names, message));
     }
 
     public void logChat(Player sender, String message) {
-        writeEntry(new LogEntry(System.currentTimeMillis(), "chat", sender.getName(), Collections.emptyList(), message));
+        queueEntry(new LogEntry(System.currentTimeMillis(), "chat", sender.getName(), Collections.emptyList(), message));
     }
 
     public CachedQuery getCachedQuery(UUID viewerId) {
@@ -84,13 +88,30 @@ public class MessageLogManager {
                                 String from,
                                 String to,
                                 String contains) {
+        return queryWithStats(startMillis, endMillis, from, to, contains, Integer.MAX_VALUE).entries();
+    }
+
+    public QueryResult queryWithStats(long startMillis,
+                                      long endMillis,
+                                      String from,
+                                      String to,
+                                      String contains,
+                                      int maxResults) {
+        long started = System.currentTimeMillis();
         List<LogEntry> out = new ArrayList<>();
+        long[] linesRead = {0L};
         String fromLower = from != null ? from.toLowerCase(Locale.ROOT) : null;
         String toLower = to != null ? to.toLowerCase(Locale.ROOT) : null;
         String containsLower = contains != null ? contains.toLowerCase(Locale.ROOT) : null;
 
-        for (Path file : listFilesBetween(startMillis, endMillis)) {
+        List<Path> files = listFilesBetween(startMillis, endMillis);
+        for (Path file : files) {
+            if (out.size() >= maxResults) {
+                break;
+            }
             readFile(file, entry -> {
+                linesRead[0]++;
+                if (out.size() >= maxResults) return;
                 if (entry.timestamp < startMillis || entry.timestamp > endMillis) return;
                 if (!"msg".equalsIgnoreCase(entry.type)) return;
                 if (fromLower != null && !entry.sender.toLowerCase(Locale.ROOT).equals(fromLower)) return;
@@ -102,7 +123,12 @@ public class MessageLogManager {
             });
         }
         out.sort(Comparator.comparingLong(e -> e.timestamp));
-        return out;
+        long duration = System.currentTimeMillis() - started;
+        plugin.getPerformanceMonitor().add("msglog.files_scanned", files.size());
+        plugin.getPerformanceMonitor().add("msglog.lines_read", linesRead[0]);
+        plugin.getPerformanceMonitor().add("msglog.matches_found", out.size());
+        plugin.getPerformanceMonitor().add("msglog.query_duration_ms", duration);
+        return new QueryResult(out, files.size(), linesRead[0], duration);
     }
 
     public List<LogEntry> context(long centerMillis, long windowMillis, int limit) {
@@ -132,24 +158,70 @@ public class MessageLogManager {
         return entries.subList(startIdx, endIdx);
     }
 
-    private void writeEntry(LogEntry entry) {
+    private void queueEntry(LogEntry entry) {
+        int maxQueueSize = plugin.getPluginConfigManager().current().logging().maxQueueSize();
+        if (queue.size() >= maxQueueSize) {
+            plugin.getPerformanceMonitor().increment("logs.message.dropped");
+            return;
+        }
+        queue.add(entry);
+        plugin.getPerformanceMonitor().increment("logs.message.queued");
+    }
+
+    public void flushQueuedAsync() {
+        List<LogEntry> drained = drainQueue();
+        if (drained.isEmpty()) {
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> writeEntries(drained));
+    }
+
+    public void flushBlocking() {
+        List<LogEntry> drained = drainQueue();
+        if (!drained.isEmpty()) {
+            writeEntries(drained);
+        }
+    }
+
+    private List<LogEntry> drainQueue() {
+        List<LogEntry> drained = new ArrayList<>();
+        LogEntry entry;
+        while ((entry = queue.poll()) != null) {
+            drained.add(entry);
+        }
+        plugin.getPerformanceMonitor().add("logs.message.queue_size", queue.size());
+        return drained;
+    }
+
+    private void writeEntries(List<LogEntry> entries) {
         try {
             Files.createDirectories(logDir);
-            Path file = logDir.resolve("msg-" + LocalDate.now().format(DATE_FORMAT) + ".log");
-            String line = encode(entry);
             synchronized (writeLock) {
-                try (BufferedWriter writer = Files.newBufferedWriter(
-                        file,
-                        StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.APPEND
-                )) {
-                    writer.write(line);
-                    writer.newLine();
+                Map<Path, List<String>> byFile = new LinkedHashMap<>();
+                ZoneId zone = ZoneId.systemDefault();
+                for (LogEntry entry : entries) {
+                    LocalDate date = Instant.ofEpochMilli(entry.timestamp).atZone(zone).toLocalDate();
+                    Path file = logDir.resolve("msg-" + date.format(DATE_FORMAT) + ".log");
+                    byFile.computeIfAbsent(file, unused -> new ArrayList<>()).add(encode(entry));
+                }
+                for (Map.Entry<Path, List<String>> fileEntry : byFile.entrySet()) {
+                    try (BufferedWriter writer = Files.newBufferedWriter(
+                            fileEntry.getKey(),
+                            StandardCharsets.UTF_8,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.APPEND
+                    )) {
+                        for (String line : fileEntry.getValue()) {
+                            writer.write(line);
+                            writer.newLine();
+                        }
+                    }
                 }
             }
+            plugin.getPerformanceMonitor().add("logs.message.flushed", entries.size());
         } catch (IOException e) {
             plugin.getLogger().warning("Failed to write msg log: " + e.getMessage());
+            plugin.getPerformanceMonitor().add("logs.message.failed", entries.size());
         }
     }
 

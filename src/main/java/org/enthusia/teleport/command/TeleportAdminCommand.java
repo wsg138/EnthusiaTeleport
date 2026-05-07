@@ -12,6 +12,8 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.Map;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class TeleportAdminCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -29,15 +31,23 @@ public class TeleportAdminCommand implements CommandExecutor {
             return true;
         }
 
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+        if (args.length == 1 && ignoresEqualCase(args[0], "reload")) {
             plugin.reloadPlugin();
             msg.send(sender, "admin.reloaded");
             return true;
         }
 
-        if (args.length >= 2 && args[0].equalsIgnoreCase("homes")) {
+        if (args.length == 1 && ignoresEqualCase(args[0], "performance")) {
+            msg.send(sender, "performance.header");
+            for (Map.Entry<String, Long> entry : plugin.getPerformanceMonitor().snapshot().entrySet()) {
+                msg.send(sender, "performance.line", Map.of("key", entry.getKey(), "value", String.valueOf(entry.getValue())));
+            }
+            return true;
+        }
+
+        if (args.length >= 2 && ignoresEqualCase(args[0], "homes")) {
             HomeManager hm = plugin.getHomeManager();
-            String action = args[1].toLowerCase();
+            String action = args[1];
 
             if (args.length >= 3) {
                 String targetName = args[2];
@@ -47,14 +57,14 @@ public class TeleportAdminCommand implements CommandExecutor {
                     return true;
                 }
 
-                if (action.equals("clear")) {
+                if (ignoresEqualCase(action, "clear")) {
                     hm.clearHomes(target.getUniqueId());
                     hm.saveAll();
                     msg.send(sender, "admin.homes.cleared", Map.of("target", target.getName() == null ? targetName : target.getName()));
                     return true;
                 }
 
-                if (action.equals("del") && args.length >= 4) {
+                if (ignoresEqualCase(action, "del") && args.length >= 4) {
                     String homeName = args[3];
                     Home home = hm.getHome(target.getUniqueId(), homeName);
                     if (home == null) {
@@ -68,7 +78,7 @@ public class TeleportAdminCommand implements CommandExecutor {
                     return true;
                 }
 
-                if (action.equals("tp") && args.length >= 4) {
+                if (ignoresEqualCase(action, "tp") && args.length >= 4) {
                     if (!sender.hasPermission("enthusia.teleport.admin.homes.teleport")) {
                         msg.send(sender, "generic.no-permission");
                         return true;

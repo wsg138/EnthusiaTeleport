@@ -1,5 +1,6 @@
 package org.enthusia.teleport.ignore;
 
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
@@ -18,6 +19,8 @@ public class IgnoreManager {
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
     private final Map<UUID, Set<UUID>> ignoring = new HashMap<>();
+    private boolean dirty;
+    private boolean saveInProgress;
 
     public IgnoreManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -30,8 +33,49 @@ public class IgnoreManager {
     }
 
     public void saveAll() {
+        dirty = true;
+        plugin.getPerformanceMonitor().increment("yaml.ignore.queued");
+    }
+
+    public void flushIfDirtyAsync() {
+        if (!dirty) {
+            plugin.getPerformanceMonitor().increment("yaml.ignore.skipped");
+            return;
+        }
+        if (saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.ignore.coalesced");
+            return;
+        }
+        Map<UUID, Set<UUID>> snapshot = snapshot();
+        dirty = false;
+        saveInProgress = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean success = writeSnapshot(snapshot);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                saveInProgress = false;
+                plugin.getPerformanceMonitor().increment(success ? "yaml.ignore.flushed" : "yaml.ignore.failed");
+                if (dirty) {
+                    flushIfDirtyAsync();
+                }
+            });
+        });
+    }
+
+    public void flushBlocking() {
+        if (!dirty && !saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.ignore.skipped");
+            return;
+        }
+        Map<UUID, Set<UUID>> snapshot = snapshot();
+        dirty = false;
+        writeSnapshot(snapshot);
+        saveInProgress = false;
+        plugin.getPerformanceMonitor().increment("yaml.ignore.flushed");
+    }
+
+    private boolean writeSnapshot(Map<UUID, Set<UUID>> snapshot) {
         YamlConfiguration yaml = new YamlConfiguration();
-        for (Map.Entry<UUID, Set<UUID>> entry : ignoring.entrySet()) {
+        for (Map.Entry<UUID, Set<UUID>> entry : snapshot.entrySet()) {
             List<String> ignoredSenders = new ArrayList<>();
             for (UUID sender : entry.getValue()) {
                 ignoredSenders.add(sender.toString());
@@ -42,8 +86,10 @@ public class IgnoreManager {
         try {
             file.getParentFile().mkdirs();
             yaml.save(file);
+            return true;
         } catch (IOException exception) {
             plugin.getLogger().warning("Failed to save ignore.yml: " + exception.getMessage());
+            return false;
         }
     }
 
@@ -55,10 +101,12 @@ public class IgnoreManager {
         Set<UUID> set = getSet(receiver);
         if (ignore) {
             set.add(sender);
+            dirty = true;
             return;
         }
 
         set.remove(sender);
+        dirty = true;
         if (set.isEmpty()) {
             ignoring.remove(receiver);
         }
@@ -102,5 +150,13 @@ public class IgnoreManager {
 
     private Set<UUID> getSet(UUID receiver) {
         return ignoring.computeIfAbsent(receiver, unused -> new HashSet<>());
+    }
+
+    private Map<UUID, Set<UUID>> snapshot() {
+        Map<UUID, Set<UUID>> copy = new HashMap<>();
+        for (Map.Entry<UUID, Set<UUID>> entry : ignoring.entrySet()) {
+            copy.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+        return copy;
     }
 }

@@ -29,6 +29,7 @@ import org.enthusia.teleport.command.TpaCommand;
 import org.enthusia.teleport.command.TpoCommand;
 import org.enthusia.teleport.command.TpposCommand;
 import org.enthusia.teleport.config.PluginConfigManager;
+import org.enthusia.teleport.debug.PerformanceMonitor;
 import org.enthusia.teleport.home.HomeGuiManager;
 import org.enthusia.teleport.home.HomeManager;
 import org.enthusia.teleport.ignore.IgnoreManager;
@@ -37,10 +38,12 @@ import org.enthusia.teleport.log.ChatLogListener;
 import org.enthusia.teleport.log.MessageLogManager;
 import org.enthusia.teleport.message.MessageManager;
 import org.enthusia.teleport.player.LastLocationManager;
+import org.enthusia.teleport.player.OfflineNameCache;
 import org.enthusia.teleport.request.TeleportRequestManager;
 import org.enthusia.teleport.rtp.RtpManager;
 import org.enthusia.teleport.spawn.SpawnManager;
 import org.enthusia.teleport.teleport.TeleportManager;
+import org.enthusia.teleport.task.TaskCoordinator;
 import org.enthusia.teleport.util.Messages;
 
 public class EnthusiaTeleportPlugin extends JavaPlugin {
@@ -63,6 +66,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     private SpawnManager spawnManager;
     private MessageManager messageManager;
     private LastLocationManager lastLocationManager;
+    private OfflineNameCache offlineNameCache;
+    private PerformanceMonitor performanceMonitor;
+    private TaskCoordinator taskCoordinator;
 
     public static EnthusiaTeleportPlugin getInstance() {
         return instance;
@@ -75,6 +81,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         saveDefaultConfig();
         saveResource("messages.yml", false);
 
+        this.performanceMonitor = new PerformanceMonitor(this);
         this.pluginConfigManager = new PluginConfigManager(this);
         this.messages = new Messages(this);
         this.messageLogManager = new MessageLogManager(this);
@@ -91,24 +98,34 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         this.spawnManager = new SpawnManager(this);
         this.messageManager = new MessageManager(this);
         this.lastLocationManager = new LastLocationManager(this);
+        this.offlineNameCache = new OfflineNameCache(this);
+        this.taskCoordinator = new TaskCoordinator(this);
 
         Bukkit.getServicesManager().register(TeleportApi.class, teleportManager, this, ServicePriority.Normal);
 
         registerCommands();
         registerListeners();
+        taskCoordinator.restart();
         getLogger().info("EnthusiaTeleport enabled.");
     }
 
     @Override
     public void onDisable() {
-        saveAllData();
+        if (taskCoordinator != null) {
+            taskCoordinator.cancelAll();
+        }
+        saveAllDataBlocking();
+        messageLogManager.flushBlocking();
+        adminLogManager.flushBlocking();
         teleportManager.shutdown();
         requestManager.shutdown();
         Bukkit.getServicesManager().unregister(TeleportApi.class, teleportManager);
     }
 
     public void reloadPlugin() {
-        saveAllData();
+        saveAllDataBlocking();
+        messageLogManager.flushBlocking();
+        adminLogManager.flushBlocking();
         teleportManager.cancelAll(TeleportManager.CancelReason.RELOAD);
         requestManager.cancelAllForReload();
 
@@ -122,6 +139,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         lastLocationManager.reload();
         messageLogManager.clearCache();
         teleportManager.reloadSettings();
+        taskCoordinator.restart();
     }
 
     public void saveAllData() {
@@ -129,6 +147,13 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         ignoreManager.saveAll();
         rtpManager.saveAll();
         lastLocationManager.saveOnlinePlayers();
+    }
+
+    public void saveAllDataBlocking() {
+        homeManager.flushBlocking();
+        ignoreManager.flushBlocking();
+        rtpManager.flushBlocking();
+        lastLocationManager.saveOnlinePlayersBlocking();
     }
 
     private void registerCommands() {
@@ -219,6 +244,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(inventoryViewCommand, this);
         Bukkit.getPluginManager().registerEvents(spawnManager, this);
         Bukkit.getPluginManager().registerEvents(lastLocationManager, this);
+        Bukkit.getPluginManager().registerEvents(offlineNameCache, this);
         Bukkit.getPluginManager().registerEvents(new ChatLogListener(messageLogManager), this);
     }
 
@@ -280,5 +306,17 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
 
     public LastLocationManager getLastLocationManager() {
         return lastLocationManager;
+    }
+
+    public OfflineNameCache getOfflineNameCache() {
+        return offlineNameCache;
+    }
+
+    public PerformanceMonitor getPerformanceMonitor() {
+        return performanceMonitor;
+    }
+
+    public TaskCoordinator getTaskCoordinator() {
+        return taskCoordinator;
     }
 }

@@ -2,6 +2,8 @@
 # EnthusiaTeleport - config.yml
 # ===============================
 
+config-version: 2
+
 teleport:
   # Warmup before normal teleports complete.
   warmup-seconds: 5.0
@@ -98,3 +100,46 @@ rtp:
 
   # How many random locations to test before giving up.
   max-attempts: 30
+
+  queue:
+    enabled: true
+    max-active-searches: 2
+    max-location-checks-per-tick: 3
+    max-chunk-load-requests-per-second: 5
+    timeout-seconds: 30
+
+  spacing:
+    min-distance-from-spawn: 0
+    min-distance-from-players: 0
+    min-distance-from-recent-rtp: 0
+    recent-rtp-memory-minutes: 120
+
+  safety:
+    max-attempts-per-player: 30
+    safe-search-radius: 4
+
+persistence:
+  flush-interval-seconds: 30
+
+logging:
+  flush-interval-seconds: 5
+  max-queue-size: 5000
+
+msglog:
+  max-days-scanned: 7
+  max-results: 500
+  timeout-seconds: 10
+
+last-location-backstop:
+  interval-minutes: 5
+  max-players-per-tick: 10
+  repair-enabled: true
+  debug-logging: false
+
+tab-cache:
+  refresh-interval-seconds: 300
+
+debug:
+  performance:
+    enabled: false
+    log-interval-seconds: 300

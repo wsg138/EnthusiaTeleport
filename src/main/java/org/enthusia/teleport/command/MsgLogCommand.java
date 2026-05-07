@@ -3,6 +3,7 @@ package org.enthusia.teleport.command;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -17,6 +18,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
 
 public class MsgLogCommand implements CommandExecutor {
 
@@ -52,13 +55,19 @@ public class MsgLogCommand implements CommandExecutor {
             return true;
         }
 
-        if (args[0].equalsIgnoreCase("view")) {
+        if (ignoresEqualCase(args[0], "view")) {
             return handleView(player, Arrays.copyOfRange(args, 1, args.length), msg);
         }
 
         long windowMillis = parseDuration(args[0]);
         if (windowMillis <= 0) {
             msg.send(player, "msglog.usage");
+            return true;
+        }
+        int maxDays = plugin.getPluginConfigManager().current().msgLog().maxDaysScanned();
+        if (windowMillis > maxDays * 86_400_000L) {
+            plugin.getPerformanceMonitor().increment("msglog.rejected_by_limit");
+            msg.send(player, "msglog.too-large");
             return true;
         }
 
@@ -74,17 +83,17 @@ public class MsgLogCommand implements CommandExecutor {
         String contains = null;
         while (index < args.length) {
             String token = args[index];
-            if (token.equalsIgnoreCase("--from") && index + 1 < args.length) {
+            if (ignoresEqualCase(token, "--from") && index + 1 < args.length) {
                 from = args[index + 1];
                 index += 2;
                 continue;
             }
-            if (token.equalsIgnoreCase("--to") && index + 1 < args.length) {
+            if (ignoresEqualCase(token, "--to") && index + 1 < args.length) {
                 to = args[index + 1];
                 index += 2;
                 continue;
             }
-            if (token.equalsIgnoreCase("--contains") && index + 1 < args.length) {
+            if (ignoresEqualCase(token, "--contains") && index + 1 < args.length) {
                 StringBuilder builder = new StringBuilder();
                 index++;
                 while (index < args.length && !args[index].startsWith("--")) {
@@ -99,35 +108,23 @@ public class MsgLogCommand implements CommandExecutor {
             return true;
         }
 
+        msg.send(player, "msglog.searching");
         long now = System.currentTimeMillis();
         long start = now - windowMillis;
-        List<LogEntry> results = logManager.query(start, now, from, to, contains);
-        logManager.cacheQuery(player.getUniqueId(), results);
-
-        if (results.isEmpty()) {
-            msg.send(player, "msglog.empty");
-            return true;
-        }
-
-        int totalPages = (int) Math.ceil(results.size() / (double) PAGE_SIZE);
-        page = Math.min(page, totalPages);
-
-        String header = msg.rawOr("msglog.header", "&8[&bMsgLog&8] &7Last &e{window}&7 &8(Page {page}/{pages})");
-        header = header.replace("{window}", args[0])
-                .replace("{page}", String.valueOf(page))
-                .replace("{pages}", String.valueOf(totalPages));
-        player.sendMessage(ChatColor.translateAlternateColorCodes('&', header));
-
-        int startIndex = (page - 1) * PAGE_SIZE;
-        int endIndex = Math.min(results.size(), startIndex + PAGE_SIZE);
-        for (int i = startIndex; i < endIndex; i++) {
-            LogEntry entry = results.get(i);
-            String line = formatEntry(entry, i + 1, false);
-            TextComponent comp = new TextComponent(ChatColor.translateAlternateColorCodes('&', line));
-            comp.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/msglog view " + (i + 1)));
-            player.spigot().sendMessage(comp);
-        }
-
+        int requestedPage = page;
+        String windowLabel = args[0];
+        int maxResults = plugin.getPluginConfigManager().current().msgLog().maxResults();
+        String queryFrom = from;
+        String queryTo = to;
+        String queryContains = contains;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                MessageLogManager.QueryResult result = logManager.queryWithStats(start, now, queryFrom, queryTo, queryContains, maxResults);
+                Bukkit.getScheduler().runTask(plugin, () -> showResults(player, msg, windowLabel, requestedPage, result.entries()));
+            } catch (RuntimeException exception) {
+                Bukkit.getScheduler().runTask(plugin, () -> msg.send(player, "msglog.failed"));
+            }
+        });
         return true;
     }
 
@@ -150,8 +147,52 @@ public class MsgLogCommand implements CommandExecutor {
         }
 
         LogEntry entry = cached.entries.get(index);
-        List<LogEntry> context = logManager.context(entry.timestamp, CONTEXT_WINDOW_MS, 10);
+        msg.send(player, "msglog.searching");
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                List<LogEntry> context = logManager.context(entry.timestamp, CONTEXT_WINDOW_MS, 10);
+                Bukkit.getScheduler().runTask(plugin, () -> showContext(player, msg, index, entry, context));
+            } catch (RuntimeException exception) {
+                Bukkit.getScheduler().runTask(plugin, () -> msg.send(player, "msglog.failed"));
+            }
+        });
+        return true;
+    }
 
+    private void showResults(Player player, Messages msg, String windowLabel, int requestedPage, List<LogEntry> results) {
+        if (!player.isOnline()) {
+            return;
+        }
+        logManager.cacheQuery(player.getUniqueId(), results);
+        if (results.isEmpty()) {
+            msg.send(player, "msglog.empty");
+            return;
+        }
+
+        int totalPages = (int) Math.ceil(results.size() / (double) PAGE_SIZE);
+        int page = Math.min(requestedPage, totalPages);
+
+        String header = msg.rawOr("msglog.header", "&8[&bMsgLog&8] &7Last &e{window}&7 &8(Page {page}/{pages})");
+        header = header.replace("{window}", windowLabel)
+                .replace("{page}", String.valueOf(page))
+                .replace("{pages}", String.valueOf(totalPages));
+        player.sendMessage(ChatColor.translateAlternateColorCodes('&', header));
+
+        int startIndex = (page - 1) * PAGE_SIZE;
+        int endIndex = Math.min(results.size(), startIndex + PAGE_SIZE);
+        for (int i = startIndex; i < endIndex; i++) {
+            LogEntry entry = results.get(i);
+            String line = formatEntry(entry, i + 1, false);
+            TextComponent comp = new TextComponent(ChatColor.translateAlternateColorCodes('&', line));
+            comp.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/msglog view " + (i + 1)));
+            player.spigot().sendMessage(comp);
+        }
+    }
+
+    private void showContext(Player player, Messages msg, int index, LogEntry entry, List<LogEntry> context) {
+        if (!player.isOnline()) {
+            return;
+        }
         String header = msg.rawOr("msglog.context-header", "&8[&bMsgLog&8] &7Context around &e#{index}");
         header = header.replace("{index}", String.valueOf(index + 1));
         player.sendMessage(ChatColor.translateAlternateColorCodes('&', header));
@@ -163,14 +204,13 @@ public class MsgLogCommand implements CommandExecutor {
             String line = formatEntry(ctx, -1, highlight);
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', line));
         }
-        return true;
     }
 
     private String formatEntry(LogEntry entry, int index, boolean highlight) {
         String time = TIME_FORMAT.format(Instant.ofEpochMilli(entry.timestamp).atZone(ZoneId.systemDefault()));
         String prefix = highlight ? "&e> " : "&8  ";
         String idx = index > 0 ? "&8#" + index + " " : "";
-        if ("chat".equalsIgnoreCase(entry.type)) {
+        if (ignoresEqualCase(entry.type, "chat")) {
             return prefix + idx + "&7[" + time + "] &aChat &7" + entry.sender + "&8: &f" + entry.message;
         }
         String targets = entry.recipients == null || entry.recipients.isEmpty()

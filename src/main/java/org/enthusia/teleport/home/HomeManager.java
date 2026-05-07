@@ -1,5 +1,6 @@
 package org.enthusia.teleport.home;
 
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -23,6 +24,8 @@ public class HomeManager {
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
     private final Map<UUID, Map<String, Home>> homes = new HashMap<>();
+    private boolean dirty;
+    private boolean saveInProgress;
 
     public HomeManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -35,8 +38,49 @@ public class HomeManager {
     }
 
     public void saveAll() {
+        dirty = true;
+        plugin.getPerformanceMonitor().increment("yaml.homes.queued");
+    }
+
+    public void flushIfDirtyAsync() {
+        if (!dirty) {
+            plugin.getPerformanceMonitor().increment("yaml.homes.skipped");
+            return;
+        }
+        if (saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.homes.coalesced");
+            return;
+        }
+        Map<UUID, Map<String, Home>> snapshot = snapshot();
+        dirty = false;
+        saveInProgress = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean success = writeSnapshot(snapshot);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                saveInProgress = false;
+                plugin.getPerformanceMonitor().increment(success ? "yaml.homes.flushed" : "yaml.homes.failed");
+                if (dirty) {
+                    flushIfDirtyAsync();
+                }
+            });
+        });
+    }
+
+    public void flushBlocking() {
+        if (!dirty && !saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.homes.skipped");
+            return;
+        }
+        Map<UUID, Map<String, Home>> snapshot = snapshot();
+        dirty = false;
+        writeSnapshot(snapshot);
+        saveInProgress = false;
+        plugin.getPerformanceMonitor().increment("yaml.homes.flushed");
+    }
+
+    private boolean writeSnapshot(Map<UUID, Map<String, Home>> snapshot) {
         YamlConfiguration config = new YamlConfiguration();
-        for (Map.Entry<UUID, Map<String, Home>> entry : homes.entrySet()) {
+        for (Map.Entry<UUID, Map<String, Home>> entry : snapshot.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
@@ -58,8 +102,10 @@ public class HomeManager {
         try {
             file.getParentFile().mkdirs();
             config.save(file);
+            return true;
         } catch (IOException exception) {
             plugin.getLogger().warning("Failed to save homes.yml: " + exception.getMessage());
+            return false;
         }
     }
 
@@ -99,6 +145,7 @@ public class HomeManager {
                 createdAt
         );
         getMap(player.getUniqueId()).put(key, home);
+        dirty = true;
     }
 
     public void deleteHome(UUID owner, String name) {
@@ -106,10 +153,12 @@ public class HomeManager {
             return;
         }
         getMap(owner).remove(normalizeName(name));
+        dirty = true;
     }
 
     public void clearHomes(UUID owner) {
         getMap(owner).clear();
+        dirty = true;
     }
 
     public int getHomeLimit(Player player) {
@@ -199,12 +248,21 @@ public class HomeManager {
         }
 
         if (dirty) {
-            saveAll();
+            writeSnapshot(snapshot());
+            this.dirty = false;
         }
     }
 
     private Map<String, Home> getMap(UUID owner) {
         return homes.computeIfAbsent(owner, unused -> new LinkedHashMap<>());
+    }
+
+    private Map<UUID, Map<String, Home>> snapshot() {
+        Map<UUID, Map<String, Home>> copy = new LinkedHashMap<>();
+        for (Map.Entry<UUID, Map<String, Home>> entry : homes.entrySet()) {
+            copy.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+        }
+        return copy;
     }
 
     private String normalizeName(String name) {

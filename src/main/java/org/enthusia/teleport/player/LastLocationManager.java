@@ -24,6 +24,9 @@ public class LastLocationManager implements Listener {
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
     private final Map<UUID, SavedLocation> lastLocations = new HashMap<>();
+    private final java.util.Queue<UUID> backstopQueue = new java.util.ArrayDeque<>();
+    private boolean dirty;
+    private boolean saveInProgress;
 
     public LastLocationManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -42,9 +45,56 @@ public class LastLocationManager implements Listener {
         saveAll();
     }
 
+    public void saveOnlinePlayersBlocking() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            record(player);
+        }
+        flushBlocking();
+    }
+
     public void saveAll() {
+        dirty = true;
+        plugin.getPerformanceMonitor().increment("yaml.last_locations.queued");
+    }
+
+    public void flushIfDirtyAsync() {
+        if (!dirty) {
+            plugin.getPerformanceMonitor().increment("yaml.last_locations.skipped");
+            return;
+        }
+        if (saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.last_locations.coalesced");
+            return;
+        }
+        Map<UUID, SavedLocation> snapshot = new HashMap<>(lastLocations);
+        dirty = false;
+        saveInProgress = true;
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean success = writeSnapshot(snapshot);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                saveInProgress = false;
+                plugin.getPerformanceMonitor().increment(success ? "yaml.last_locations.flushed" : "yaml.last_locations.failed");
+                if (dirty) {
+                    flushIfDirtyAsync();
+                }
+            });
+        });
+    }
+
+    public void flushBlocking() {
+        if (!dirty && !saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.last_locations.skipped");
+            return;
+        }
+        dirty = false;
+        writeSnapshot(new HashMap<>(lastLocations));
+        saveInProgress = false;
+        plugin.getPerformanceMonitor().increment("yaml.last_locations.flushed");
+    }
+
+    private boolean writeSnapshot(Map<UUID, SavedLocation> snapshot) {
         YamlConfiguration yaml = new YamlConfiguration();
-        for (Map.Entry<UUID, SavedLocation> entry : lastLocations.entrySet()) {
+        for (Map.Entry<UUID, SavedLocation> entry : snapshot.entrySet()) {
             SavedLocation saved = entry.getValue();
             ConfigurationSection section = yaml.createSection(entry.getKey().toString());
             section.set("world", saved.worldName());
@@ -59,8 +109,10 @@ public class LastLocationManager implements Listener {
         try {
             file.getParentFile().mkdirs();
             yaml.save(file);
+            return true;
         } catch (IOException exception) {
             plugin.getLogger().warning("Failed to save last-locations.yml: " + exception.getMessage());
+            return false;
         }
     }
 
@@ -96,6 +148,34 @@ public class LastLocationManager implements Listener {
                 location.getPitch(),
                 System.currentTimeMillis()
         ));
+        dirty = true;
+    }
+
+    public void startBackstopScan() {
+        backstopQueue.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            backstopQueue.add(player.getUniqueId());
+        }
+        plugin.getPerformanceMonitor().add("last_location.backstop_queued", backstopQueue.size());
+    }
+
+    public void tickBackstopScan() {
+        int limit = plugin.getPluginConfigManager().current().lastLocationBackstop().maxPlayersPerTick();
+        int scanned = 0;
+        while (scanned < limit && !backstopQueue.isEmpty()) {
+            UUID playerId = backstopQueue.poll();
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) {
+                record(player);
+                scanned++;
+            }
+        }
+        if (scanned > 0) {
+            plugin.getPerformanceMonitor().add("last_location.players_scanned", scanned);
+            if (plugin.getPluginConfigManager().current().lastLocationBackstop().debugLogging()) {
+                plugin.getLogger().info("Last-location backstop recorded " + scanned + " player(s).");
+            }
+        }
     }
 
     @EventHandler
@@ -143,6 +223,7 @@ public class LastLocationManager implements Listener {
                     section.getLong("updated-at", 0L)
             ));
         }
+        dirty = false;
     }
 
     private record SavedLocation(

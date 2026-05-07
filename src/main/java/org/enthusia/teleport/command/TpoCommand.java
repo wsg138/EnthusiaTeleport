@@ -16,6 +16,8 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.Map;
 
+import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
+
 public class TpoCommand implements CommandExecutor {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -39,7 +41,7 @@ public class TpoCommand implements CommandExecutor {
         }
 
         String targetName = args[0];
-        boolean force = args.length >= 2 && args[1].equalsIgnoreCase("force");
+        boolean force = args.length >= 2 && ignoresEqualCase(args[1], "force");
         OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
 
         if (target.isOnline()) {
