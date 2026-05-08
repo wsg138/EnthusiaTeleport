@@ -1,6 +1,6 @@
 name: EnthusiaTeleport
 main: org.enthusia.teleport.EnthusiaTeleportPlugin
-version: 1.2.1
+version: 1.2.2
 api-version: "1.21"
 author: Lincoln
 description: Teleport, home, spawn, messaging, and staff utility plugin for Enthusia.

@@ -138,13 +138,20 @@ public class RtpManager {
             plugin.getMessages().send(player, "rtp.disabled");
             return;
         }
+        RtpSearch search = new RtpSearch(player.getUniqueId(), System.currentTimeMillis());
         if (!settings.queue().enabled()) {
-            queuedSearches.add(new RtpSearch(player.getUniqueId(), System.currentTimeMillis()));
+            if (activeSearches.size() < settings.queue().maxActiveSearches()) {
+                activeSearches.add(search);
+                plugin.getPerformanceMonitor().increment("rtp.direct_started");
+            } else {
+                queuedSearches.add(search);
+                plugin.getPerformanceMonitor().increment("rtp.direct_deferred");
+            }
         } else {
-            queuedSearches.add(new RtpSearch(player.getUniqueId(), System.currentTimeMillis()));
+            queuedSearches.add(search);
+            plugin.getPerformanceMonitor().increment("rtp.queued");
         }
         plugin.getMessages().send(player, "rtp.search-queued");
-        plugin.getPerformanceMonitor().increment("rtp.queued");
     }
 
     public void tickQueue() {
@@ -163,25 +170,38 @@ public class RtpManager {
         Iterator<RtpSearch> iterator = activeSearches.iterator();
         while (iterator.hasNext()) {
             RtpSearch search = iterator.next();
+            if (search.removeRequested()) {
+                iterator.remove();
+                plugin.getPerformanceMonitor().increment(search.removalCounter());
+                plugin.getPerformanceMonitor().increment("rtp.queue_removals");
+                continue;
+            }
             Player player = Bukkit.getPlayer(search.playerId());
             if (player == null || !player.isOnline()) {
                 iterator.remove();
                 plugin.getPerformanceMonitor().increment("rtp.fail.offline");
-                continue;
-            }
-            if (search.waitingForChunk()) {
+                plugin.getPerformanceMonitor().increment("rtp.queue_removals");
                 continue;
             }
             if (timedOut(search, settings)) {
                 iterator.remove();
                 plugin.getMessages().send(player, "rtp.search-timeout");
                 plugin.getPerformanceMonitor().increment("rtp.fail.timeout");
+                plugin.getPerformanceMonitor().increment(search.waitingForChunk() ? "rtp.fail.chunk_timeout" : "rtp.fail.search_timeout");
+                if (search.waitingForChunk()) {
+                    plugin.getPerformanceMonitor().increment("rtp.fail.stuck_waiting_search");
+                }
+                plugin.getPerformanceMonitor().increment("rtp.queue_removals");
+                continue;
+            }
+            if (search.waitingForChunk()) {
                 continue;
             }
             if (search.attempts() >= settings.safety().maxAttemptsPerPlayer()) {
                 iterator.remove();
                 plugin.getMessages().send(player, "teleport.safe-fallback-failed");
                 plugin.getPerformanceMonitor().increment("rtp.fail.max_attempts");
+                plugin.getPerformanceMonitor().increment("rtp.queue_removals");
                 continue;
             }
             if (checksRemaining <= 0 || !tryConsumeChunkBudget(settings)) {
@@ -189,18 +209,21 @@ public class RtpManager {
             }
             checksRemaining--;
             search.incrementAttempts();
-            requestCandidate(search, player, settings);
+            if (requestCandidate(search, player, settings) == CandidateRequestStatus.FAILED_REMOVE) {
+                iterator.remove();
+                plugin.getPerformanceMonitor().increment("rtp.queue_removals");
+            }
         }
     }
 
-    private void requestCandidate(RtpSearch search, Player player, PluginConfig.RtpSettings settings) {
+    private CandidateRequestStatus requestCandidate(RtpSearch search, Player player, PluginConfig.RtpSettings settings) {
         World world = Bukkit.getWorld(settings.world());
         if (world == null) {
             plugin.getLogger().warning("RTP world not found: " + settings.world());
-            activeSearches.remove(search);
             plugin.getMessages().send(player, "teleport.safe-fallback-failed");
             plugin.getPerformanceMonitor().increment("rtp.fail.world_missing");
-            return;
+            plugin.getPerformanceMonitor().increment("rtp.fail.failed_world");
+            return CandidateRequestStatus.FAILED_REMOVE;
         }
 
         int minX = Math.min(settings.minX(), settings.maxX());
@@ -213,7 +236,7 @@ public class RtpManager {
 
         if (!passesCheapSpacing(world, x, z, settings)) {
             plugin.getPerformanceMonitor().increment("rtp.fail.spacing");
-            return;
+            return CandidateRequestStatus.CONTINUE;
         }
 
         search.setWaitingForChunk(true);
@@ -221,17 +244,21 @@ public class RtpManager {
         world.getChunkAtAsync(x >> 4, z >> 4).whenComplete((Chunk chunk, Throwable throwable) ->
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     search.setWaitingForChunk(false);
-                    if (throwable != null || chunk == null || !activeSearches.contains(search)) {
+                    if (!activeSearches.contains(search)) {
+                        return;
+                    }
+                    if (throwable != null || chunk == null) {
                         plugin.getPerformanceMonitor().increment("rtp.fail.chunk");
                         return;
                     }
                     validateCandidate(search, player, world, x, z, settings);
                 }));
+        return CandidateRequestStatus.CONTINUE;
     }
 
     private void validateCandidate(RtpSearch search, Player player, World world, int x, int z, PluginConfig.RtpSettings settings) {
         if (!player.isOnline()) {
-            activeSearches.remove(search);
+            search.requestRemoval("rtp.fail.offline");
             return;
         }
         int y = world.getHighestBlockYAt(x, z) + 1;
@@ -248,7 +275,6 @@ public class RtpManager {
             return;
         }
 
-        activeSearches.remove(search);
         rememberRecent(destination);
         plugin.getTeleportManager().startTeleport(
                 player,
@@ -258,6 +284,7 @@ public class RtpManager {
                 "teleport.warmup-start",
                 () -> incrementUse(player.getUniqueId())
         );
+        search.requestRemoval("rtp.completed");
     }
 
     private boolean passesCheapSpacing(World world, int x, int z, PluginConfig.RtpSettings settings) {
@@ -368,6 +395,8 @@ public class RtpManager {
         private final long startedAt;
         private int attempts;
         private boolean waitingForChunk;
+        private boolean removeRequested;
+        private String removalCounter = "rtp.queue_removals";
 
         private RtpSearch(UUID playerId, long startedAt) {
             this.playerId = playerId;
@@ -397,6 +426,24 @@ public class RtpManager {
         private void setWaitingForChunk(boolean waitingForChunk) {
             this.waitingForChunk = waitingForChunk;
         }
+
+        private boolean removeRequested() {
+            return removeRequested;
+        }
+
+        private String removalCounter() {
+            return removalCounter;
+        }
+
+        private void requestRemoval(String removalCounter) {
+            this.removeRequested = true;
+            this.removalCounter = removalCounter;
+        }
+    }
+
+    private enum CandidateRequestStatus {
+        CONTINUE,
+        FAILED_REMOVE
     }
 
     private record RecentRtp(String worldName, double x, double z, long timestamp) {
