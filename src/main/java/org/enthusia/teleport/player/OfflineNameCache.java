@@ -40,6 +40,7 @@ public class OfflineNameCache implements Listener {
             return;
         }
 
+        long startedNanos = System.nanoTime();
         List<String> onlineNames = Bukkit.getOnlinePlayers().stream()
                 .map(Player::getName)
                 .filter(Objects::nonNull)
@@ -62,6 +63,11 @@ public class OfflineNameCache implements Listener {
                 knownNames = List.copyOf(sorted);
                 plugin.getPerformanceMonitor().increment("tab_cache.refreshes");
                 plugin.getPerformanceMonitor().add("tab_cache.names_loaded", sorted.size());
+                long elapsedMillis = (System.nanoTime() - startedNanos) / 1_000_000L;
+                plugin.getPerformanceMonitor().add("tab_cache.refresh_duration_ms", elapsedMillis);
+                if (plugin.getPluginConfigManager().current().debug().performanceEnabled()) {
+                    plugin.getLogger().info("Offline name cache refreshed " + sorted.size() + " name(s) in " + elapsedMillis + "ms.");
+                }
             } finally {
                 refreshRunning.set(false);
             }

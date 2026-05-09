@@ -127,7 +127,7 @@ public class PluginConfigManager {
                         config.getBoolean("last-location-backstop.debug-logging", false)
                 ),
                 new PluginConfig.TabCacheSettings(
-                        Math.max(30, config.getInt("tab-cache.refresh-interval-seconds", 300))
+                        parseOfflineNameCacheRefreshMinutes(config)
                 ),
                 new PluginConfig.DebugSettings(
                         config.getBoolean("debug.performance.enabled", false),
@@ -244,6 +244,17 @@ public class PluginConfigManager {
             values.put(key, section.getInt(key));
         }
         return values;
+    }
+
+    private int parseOfflineNameCacheRefreshMinutes(FileConfiguration config) {
+        if (config.contains("tab-cache.offline-name-cache-refresh-minutes")) {
+            return Math.max(1, config.getInt("tab-cache.offline-name-cache-refresh-minutes", 15));
+        }
+        if (config.contains("tab-cache.refresh-interval-seconds")) {
+            int seconds = Math.max(60, config.getInt("tab-cache.refresh-interval-seconds", 900));
+            return Math.max(1, (int) Math.ceil(seconds / 60.0D));
+        }
+        return 15;
     }
 
     private List<PluginConfig.KitItem> parseKitItems(ConfigurationSection section) {

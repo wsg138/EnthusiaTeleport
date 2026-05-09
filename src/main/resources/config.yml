@@ -137,7 +137,7 @@ last-location-backstop:
   debug-logging: false
 
 tab-cache:
-  refresh-interval-seconds: 300
+  offline-name-cache-refresh-minutes: 15
 
 debug:
   performance:

@@ -131,7 +131,7 @@ public record PluginConfig(
     }
 
     public record TabCacheSettings(
-            int refreshIntervalSeconds
+            int offlineNameCacheRefreshMinutes
     ) {
     }
 

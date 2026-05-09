@@ -41,7 +41,8 @@ public class TaskCoordinator {
             scheduleRepeating("last-location-backstop-tick", 1L, 1L, () -> plugin.getLastLocationManager().tickBackstopScan());
         }
 
-        scheduleRepeating("offline-name-cache", 20L, Math.max(30, config.tabCache().refreshIntervalSeconds()) * 20L,
+        long offlineNameRefreshTicks = Math.max(1, config.tabCache().offlineNameCacheRefreshMinutes()) * 60L * 20L;
+        scheduleRepeating("offline-name-cache", 20L, offlineNameRefreshTicks,
                 () -> plugin.getOfflineNameCache().refresh());
 
         if (config.debug().performanceEnabled()) {
