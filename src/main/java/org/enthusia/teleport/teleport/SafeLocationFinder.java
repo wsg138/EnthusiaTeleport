@@ -62,7 +62,39 @@ public class SafeLocationFinder {
             }
         }
 
-        return best;
+        if (best != null) {
+            return best;
+        }
+
+        return findGroundStraightBelow(target);
+    }
+
+    private Location findGroundStraightBelow(Location target) {
+        World world = target.getWorld();
+        int x = target.getBlockX();
+        int z = target.getBlockZ();
+        int startY = Math.min(target.getBlockY(), world.getMaxHeight() - 2);
+
+        for (int y = startY; y >= world.getMinHeight() + 1; y--) {
+            Block feet = world.getBlockAt(x, y, z);
+            Block head = feet.getRelative(BlockFace.UP);
+            Block below = feet.getRelative(BlockFace.DOWN);
+
+            if (!isPassableForTeleport(feet.getType())) continue;
+            if (!isPassableForTeleport(head.getType())) continue;
+            if (!isSupportedForTeleport(feet.getType(), below.getType())) continue;
+
+            return new Location(
+                    world,
+                    x + 0.5,
+                    y,
+                    z + 0.5,
+                    target.getYaw(),
+                    target.getPitch()
+            );
+        }
+
+        return null;
     }
 
     public boolean isSafeTeleportLocation(Location loc) {

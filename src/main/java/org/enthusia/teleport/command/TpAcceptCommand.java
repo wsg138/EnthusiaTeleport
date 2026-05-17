@@ -1,7 +1,6 @@
 package org.enthusia.teleport.command;
 
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
@@ -80,16 +79,15 @@ public class TpAcceptCommand implements CommandExecutor {
         msg.send(anchor, "teleport.accepted-to-anchor",
                 Map.of("teleporter", teleporter.getName(), "seconds", String.valueOf(warmupSeconds)));
 
-        Location targetLoc = anchor.getLocation();
-
         reqMgr.removeRequest(req);
 
-        tpMgr.startTeleport(
+        tpMgr.startTeleportToLivePlayer(
                 teleporter,
-                targetLoc,
-                true,
                 anchor,
-                "teleport.warmup-start"
+                true,
+                "teleport.warmup-start",
+                null,
+                TeleportManager.TeleportFlags.standard()
         );
 
         return true;

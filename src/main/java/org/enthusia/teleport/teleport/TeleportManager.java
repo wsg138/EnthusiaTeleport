@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public class TeleportManager implements TeleportApi, Listener {
 
@@ -202,6 +203,33 @@ public class TeleportManager implements TeleportApi, Listener {
                               String warmupKey,
                               Runnable onSuccess,
                               TeleportFlags flags) {
+        startTeleport(player, () -> target, useSafeSearch, anchor, warmupKey, onSuccess, flags);
+    }
+
+    public void startTeleportToLivePlayer(Player player,
+                                          Player anchor,
+                                          boolean useSafeSearch,
+                                          String warmupKey,
+                                          Runnable onSuccess,
+                                          TeleportFlags flags) {
+        startTeleport(
+                player,
+                () -> anchor != null && anchor.isOnline() ? anchor.getLocation() : null,
+                useSafeSearch,
+                anchor,
+                warmupKey,
+                onSuccess,
+                flags
+        );
+    }
+
+    private void startTeleport(Player player,
+                               Supplier<Location> targetSupplier,
+                               boolean useSafeSearch,
+                               Player anchor,
+                               String warmupKey,
+                               Runnable onSuccess,
+                               TeleportFlags flags) {
         if (player == null) {
             return;
         }
@@ -222,7 +250,7 @@ public class TeleportManager implements TeleportApi, Listener {
 
         double warmup = bypassWarmup ? 0.0D : getEffectiveWarmupSeconds(player.getUniqueId());
         if (warmup <= 0.05D) {
-            if (doTeleport(player, target, useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && onSuccess != null) {
+            if (doTeleport(player, targetSupplier.get(), useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && onSuccess != null) {
                 onSuccess.run();
             }
             return;
@@ -236,7 +264,8 @@ public class TeleportManager implements TeleportApi, Listener {
             @Override
             public void run() {
                 ActiveTeleport active = activeTeleports.remove(player.getUniqueId());
-                if (doTeleport(player, target, useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && active != null && active.onSuccess != null) {
+                Location liveTarget = targetSupplier.get();
+                if (doTeleport(player, liveTarget, useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && active != null && active.onSuccess != null) {
                     active.onSuccess.run();
                 }
             }
