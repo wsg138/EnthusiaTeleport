@@ -32,7 +32,11 @@ public class SetHomeCommand implements CommandExecutor {
             return true;
         }
 
-        String name = args[0];
+        String name = args[0].trim();
+        if (name.isEmpty() || name.contains(".")) {
+            msg.send(player, "home.invalid-name", Map.of("name", args[0]));
+            return true;
+        }
 
         HomeManager hm = plugin.getHomeManager();
 

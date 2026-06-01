@@ -9,6 +9,10 @@ import org.enthusia.teleport.config.PluginConfig;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -20,6 +24,8 @@ import java.util.Map;
 import java.util.UUID;
 
 public class HomeManager {
+
+    private static final DateTimeFormatter BACKUP_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
@@ -186,7 +192,15 @@ public class HomeManager {
             }
         }
 
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        YamlConfiguration config;
+        try {
+            config = YamlConfiguration.loadConfiguration(file);
+        } catch (RuntimeException exception) {
+            File backup = backupUnreadableHomesFile();
+            plugin.getLogger().severe("Could not load homes.yml, so homes were left empty for this startup. "
+                    + "The unreadable file was moved to " + backup.getName() + ". Cause: " + exception.getMessage());
+            return;
+        }
         boolean dirty = false;
 
         for (String key : config.getKeys(false)) {
@@ -211,6 +225,10 @@ public class HomeManager {
 
                 String displayName = homeSection.getString("name", homeKey);
                 String normalized = normalizeName(displayName);
+                if (normalized.isEmpty() || normalized.contains(".")) {
+                    dirty = true;
+                    continue;
+                }
                 String worldName = homeSection.getString("world");
                 if (worldName == null || worldName.isBlank()) {
                     continue;
@@ -265,7 +283,26 @@ public class HomeManager {
         return copy;
     }
 
+    private File backupUnreadableHomesFile() {
+        String timestamp = LocalDateTime.now().format(BACKUP_TIMESTAMP);
+        File backup = new File(file.getParentFile(), "homes-unreadable-" + timestamp + ".yml");
+        int suffix = 1;
+        while (backup.exists()) {
+            backup = new File(file.getParentFile(), "homes-unreadable-" + timestamp + "-" + suffix + ".yml");
+            suffix++;
+        }
+
+        try {
+            file.getParentFile().mkdirs();
+            Files.move(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            file.createNewFile();
+        } catch (IOException exception) {
+            plugin.getLogger().severe("Failed to move unreadable homes.yml: " + exception.getMessage());
+        }
+        return backup;
+    }
+
     private String normalizeName(String name) {
-        return name.toLowerCase(Locale.ROOT);
+        return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
     }
 }

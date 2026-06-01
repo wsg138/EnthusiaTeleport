@@ -46,6 +46,8 @@ import org.enthusia.teleport.teleport.TeleportManager;
 import org.enthusia.teleport.task.TaskCoordinator;
 import org.enthusia.teleport.util.Messages;
 
+import java.io.File;
+
 public class EnthusiaTeleportPlugin extends JavaPlugin {
 
     private static EnthusiaTeleportPlugin instance;
@@ -79,7 +81,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         instance = this;
 
         saveDefaultConfig();
-        saveResource("messages.yml", false);
+        if (!new File(getDataFolder(), "messages.yml").exists()) {
+            saveResource("messages.yml", false);
+        }
 
         this.performanceMonitor = new PerformanceMonitor(this);
         this.pluginConfigManager = new PluginConfigManager(this);
@@ -115,11 +119,19 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
             taskCoordinator.cancelAll();
         }
         saveAllDataBlocking();
-        messageLogManager.flushBlocking();
-        adminLogManager.flushBlocking();
-        teleportManager.shutdown();
-        requestManager.shutdown();
-        Bukkit.getServicesManager().unregister(TeleportApi.class, teleportManager);
+        if (messageLogManager != null) {
+            messageLogManager.flushBlocking();
+        }
+        if (adminLogManager != null) {
+            adminLogManager.flushBlocking();
+        }
+        if (teleportManager != null) {
+            teleportManager.shutdown();
+            Bukkit.getServicesManager().unregister(TeleportApi.class, teleportManager);
+        }
+        if (requestManager != null) {
+            requestManager.shutdown();
+        }
     }
 
     public void reloadPlugin() {
@@ -150,10 +162,18 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     }
 
     public void saveAllDataBlocking() {
-        homeManager.flushBlocking();
-        ignoreManager.flushBlocking();
-        rtpManager.flushBlocking();
-        lastLocationManager.saveOnlinePlayersBlocking();
+        if (homeManager != null) {
+            homeManager.flushBlocking();
+        }
+        if (ignoreManager != null) {
+            ignoreManager.flushBlocking();
+        }
+        if (rtpManager != null) {
+            rtpManager.flushBlocking();
+        }
+        if (lastLocationManager != null) {
+            lastLocationManager.saveOnlinePlayersBlocking();
+        }
     }
 
     private void registerCommands() {
