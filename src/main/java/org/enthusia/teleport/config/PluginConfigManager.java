@@ -22,8 +22,8 @@ import java.util.Set;
 
 public class PluginConfigManager {
 
-    public static final int CURRENT_CONFIG_VERSION = 2;
-    public static final int CURRENT_MESSAGES_VERSION = 2;
+    public static final int CURRENT_CONFIG_VERSION = 3;
+    public static final int CURRENT_MESSAGES_VERSION = 3;
 
     private final EnthusiaTeleportPlugin plugin;
     private volatile PluginConfig current;
@@ -50,6 +50,7 @@ public class PluginConfigManager {
                 config.getInt("config-version", CURRENT_CONFIG_VERSION),
                 new PluginConfig.TeleportSettings(
                         config.getDouble("teleport.warmup-seconds", 5.0D),
+                        Math.max(0.0D, config.getDouble("teleport.movement-cancel-distance", 0.35D)),
                         Math.max(0, config.getInt("teleport.cooldown-seconds", 60)),
                         Math.max(1, config.getInt("teleport.request-expiry-seconds", 60)),
                         Math.max(1, config.getInt("teleport.safe-search-radius", 4)),

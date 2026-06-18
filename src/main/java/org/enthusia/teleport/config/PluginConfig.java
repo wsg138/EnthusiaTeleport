@@ -21,6 +21,7 @@ public record PluginConfig(
 
     public record TeleportSettings(
             double warmupSeconds,
+            double movementCancelDistance,
             int cooldownSeconds,
             int requestExpirySeconds,
             int safeSearchRadius,

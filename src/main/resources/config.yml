@@ -2,11 +2,15 @@
 # EnthusiaTeleport - config.yml
 # ===============================
 
-config-version: 2
+config-version: 3
 
 teleport:
   # Warmup before normal teleports complete.
   warmup-seconds: 5.0
+
+  # How far a player may drift during warmup before the teleport is cancelled.
+  # Camera movement does not count. Small values reduce accidental jitter cancels.
+  movement-cancel-distance: 0.35
 
   # Cooldown after a normal teleport completes.
   cooldown-seconds: 60

@@ -72,14 +72,14 @@ public class TeleportManager implements TeleportApi, Listener {
 
     private static class ActiveTeleport {
         private final UUID playerId;
-        private final Location originBlock;
+        private final Location origin;
         private final BukkitTask task;
         private final Player anchor;
         private final Runnable onSuccess;
 
-        private ActiveTeleport(UUID playerId, Location originBlock, BukkitTask task, Player anchor, Runnable onSuccess) {
+        private ActiveTeleport(UUID playerId, Location origin, BukkitTask task, Player anchor, Runnable onSuccess) {
             this.playerId = playerId;
-            this.originBlock = originBlock;
+            this.origin = origin;
             this.task = task;
             this.anchor = anchor;
             this.onSuccess = onSuccess;
@@ -96,6 +96,7 @@ public class TeleportManager implements TeleportApi, Listener {
 
     private SafeLocationFinder safeFinder;
     private double baseWarmupSeconds;
+    private double movementCancelDistanceSquared;
     private int baseCooldownSeconds;
     private Set<String> blockedTargetWorlds;
 
@@ -109,6 +110,7 @@ public class TeleportManager implements TeleportApi, Listener {
     public void reloadSettings() {
         PluginConfig.TeleportSettings settings = plugin.getPluginConfigManager().current().teleport();
         this.baseWarmupSeconds = settings.warmupSeconds();
+        this.movementCancelDistanceSquared = settings.movementCancelDistance() * settings.movementCancelDistance();
         this.baseCooldownSeconds = settings.cooldownSeconds();
         this.safeFinder = new SafeLocationFinder(settings.safeSearchRadius());
         this.blockedTargetWorlds = settings.blockedTargetWorlds();
@@ -259,7 +261,7 @@ public class TeleportManager implements TeleportApi, Listener {
         cancelTeleport(player.getUniqueId(), null);
         messages.send(player, warmupKey, Map.of("seconds", String.format(java.util.Locale.US, "%.1f", warmup)));
 
-        Location originBlock = player.getLocation().getBlock().getLocation();
+        Location origin = player.getLocation().clone();
         BukkitTask task = new BukkitRunnable() {
             @Override
             public void run() {
@@ -271,7 +273,7 @@ public class TeleportManager implements TeleportApi, Listener {
             }
         }.runTaskLater(plugin, (long) Math.ceil(warmup * 20.0D));
 
-        activeTeleports.put(player.getUniqueId(), new ActiveTeleport(player.getUniqueId(), originBlock, task, anchor, onSuccess));
+        activeTeleports.put(player.getUniqueId(), new ActiveTeleport(player.getUniqueId(), origin, task, anchor, onSuccess));
     }
 
     public void cancelTeleport(UUID playerId, CancelReason reason) {
@@ -316,7 +318,7 @@ public class TeleportManager implements TeleportApi, Listener {
             return;
         }
 
-        if (movedBlock(event.getFrom(), event.getTo())) {
+        if (movedTooFar(active.origin, event.getTo())) {
             cancelTeleport(event.getPlayer().getUniqueId(), CancelReason.MOVE);
         }
     }
@@ -435,10 +437,11 @@ public class TeleportManager implements TeleportApi, Listener {
         messages.send(active.anchor, key, Map.of("player", player.getName()));
     }
 
-    private boolean movedBlock(Location from, Location to) {
-        return from.getBlockX() != to.getBlockX()
-                || from.getBlockY() != to.getBlockY()
-                || from.getBlockZ() != to.getBlockZ();
+    private boolean movedTooFar(Location origin, Location to) {
+        if (origin == null || to == null || !Objects.equals(origin.getWorld(), to.getWorld())) {
+            return true;
+        }
+        return origin.distanceSquared(to) > movementCancelDistanceSquared;
     }
 
     private boolean sameBlock(Location first, Location second) {

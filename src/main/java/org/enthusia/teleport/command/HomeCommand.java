@@ -3,10 +3,11 @@ package org.enthusia.teleport.command;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.home.Home;
 import org.enthusia.teleport.home.HomeManager;
 import org.enthusia.teleport.util.Messages;
 
-import java.util.Map;
+import java.util.Collection;
 
 import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
 
@@ -34,13 +35,19 @@ public class HomeCommand implements CommandExecutor {
             return true;
         }
 
-        // /home opens GUI
+        // /home teleports directly when there is only one possible destination.
         if (args.length == 0) {
-            if (hm.getHomeCount(player.getUniqueId()) == 0) {
+            Collection<Home> homes = hm.getHomes(player.getUniqueId());
+            if (homes.isEmpty()) {
                 msg.send(player, "home.no-homes");
                 return true;
             }
-            plugin.getHomeGuiManager().openHomeGui(player);
+            if (homes.size() == 1) {
+                Home home = homes.iterator().next();
+                plugin.getHomeGuiManager().teleportToHome(player, home.getName(), false);
+                return true;
+            }
+            msg.send(player, "home.specify-name");
             return true;
         }
 

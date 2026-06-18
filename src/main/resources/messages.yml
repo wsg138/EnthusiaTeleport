@@ -2,7 +2,7 @@
 # EnthusiaTeleport - messages.yml
 # ===============================
 
-config-version: 2
+config-version: 3
 
 generic.no-console: "&cOnly players can use this command."
 generic.no-permission: "&cYou do not have permission to do that."
@@ -74,6 +74,7 @@ bed.missing: "&cYour bed is missing or obstructed."
 bed.warmup-start: "&eTeleporting to your bed in &6{seconds}s&e. Don't move."
 
 home.no-homes: "&cYou do not have any homes set."
+home.specify-name: "&cYou have multiple homes. Use &e/home <name>&c."
 home.limit-reached: "&cYou have reached your home limit (&e{limit}&c)."
 home.set.success: "&aSet home &e{name}&a."
 home.set.duplicate: "&cYou already have a home named &e{name}&c."

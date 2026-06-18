@@ -8,7 +8,7 @@
 
     <groupId>org.enthusia</groupId>
     <artifactId>enthusia-teleport</artifactId>
-    <version>1.2.3</version>
+    <version>1.2.4</version>
     <packaging>jar</packaging>
 
     <name>EnthusiaTeleport</name>
