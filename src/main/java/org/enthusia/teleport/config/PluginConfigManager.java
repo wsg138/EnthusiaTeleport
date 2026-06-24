@@ -26,7 +26,7 @@ public class PluginConfigManager {
     public static final int CURRENT_MESSAGES_VERSION = 3;
 
     private final EnthusiaTeleportPlugin plugin;
-    private volatile PluginConfig current;
+    private volatile PluginConfig currentConfig;
 
     public PluginConfigManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -38,11 +38,11 @@ public class PluginConfigManager {
         migrateYaml("messages.yml", CURRENT_MESSAGES_VERSION);
         plugin.reloadConfig();
         FileConfiguration config = plugin.getConfig();
-        current = parse(config);
+        currentConfig = parse(config);
     }
 
     public PluginConfig current() {
-        return current;
+        return currentConfig;
     }
 
     private PluginConfig parse(FileConfiguration config) {

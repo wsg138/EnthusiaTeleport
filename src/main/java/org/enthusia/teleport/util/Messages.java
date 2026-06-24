@@ -36,8 +36,10 @@ public class Messages {
 
         config = YamlConfiguration.loadConfiguration(file);
 
-        InputStream defaultsStream = plugin.getResource("messages.yml");
-        if (defaultsStream != null) {
+        try (InputStream defaultsStream = plugin.getResource("messages.yml")) {
+            if (defaultsStream == null) {
+                return;
+            }
             YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
                     new InputStreamReader(defaultsStream, StandardCharsets.UTF_8)
             );
@@ -48,6 +50,8 @@ public class Messages {
             } catch (IOException e) {
                 plugin.getLogger().warning("Failed to save messages.yml defaults: " + e.getMessage());
             }
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to close messages.yml defaults: " + e.getMessage());
         }
     }
 

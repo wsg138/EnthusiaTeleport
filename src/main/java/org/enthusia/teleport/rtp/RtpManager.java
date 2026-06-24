@@ -391,53 +391,53 @@ public class RtpManager {
     }
 
     private static final class RtpSearch {
-        private final UUID playerId;
-        private final long startedAt;
-        private int attempts;
-        private boolean waitingForChunk;
-        private boolean removeRequested;
-        private String removalCounter = "rtp.queue_removals";
+        private final UUID playerUuid;
+        private final long startedAtMillis;
+        private int attemptCount;
+        private boolean waitingOnChunk;
+        private boolean removalRequested;
+        private String removalCounterName = "rtp.queue_removals";
 
         private RtpSearch(UUID playerId, long startedAt) {
-            this.playerId = playerId;
-            this.startedAt = startedAt;
+            this.playerUuid = playerId;
+            this.startedAtMillis = startedAt;
         }
 
         private UUID playerId() {
-            return playerId;
+            return playerUuid;
         }
 
         private long startedAt() {
-            return startedAt;
+            return startedAtMillis;
         }
 
         private int attempts() {
-            return attempts;
+            return attemptCount;
         }
 
         private void incrementAttempts() {
-            attempts++;
+            attemptCount++;
         }
 
         private boolean waitingForChunk() {
-            return waitingForChunk;
+            return waitingOnChunk;
         }
 
         private void setWaitingForChunk(boolean waitingForChunk) {
-            this.waitingForChunk = waitingForChunk;
+            this.waitingOnChunk = waitingForChunk;
         }
 
         private boolean removeRequested() {
-            return removeRequested;
+            return removalRequested;
         }
 
         private String removalCounter() {
-            return removalCounter;
+            return removalCounterName;
         }
 
         private void requestRemoval(String removalCounter) {
-            this.removeRequested = true;
-            this.removalCounter = removalCounter;
+            this.removalRequested = true;
+            this.removalCounterName = removalCounter;
         }
     }
 
