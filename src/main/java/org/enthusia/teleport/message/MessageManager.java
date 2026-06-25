@@ -6,17 +6,17 @@ import org.enthusia.teleport.EnthusiaTeleportPlugin;
 import org.enthusia.teleport.util.Messages;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageManager {
 
     private final Messages messages;
     private final org.enthusia.teleport.log.MessageLogManager logManager;
-    private final Map<UUID, List<UUID>> lastPartnersByPlayer = new HashMap<>();
-    private final Map<UUID, List<String>> lastPartnerNamesByPlayer = new HashMap<>();
+    private final Map<UUID, List<UUID>> lastPartnersByPlayer = new ConcurrentHashMap<>();
+    private final Map<UUID, List<String>> lastPartnerNamesByPlayer = new ConcurrentHashMap<>();
 
     public MessageManager(EnthusiaTeleportPlugin plugin) {
         this.messages = plugin.getMessages();

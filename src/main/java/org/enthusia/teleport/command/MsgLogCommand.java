@@ -17,6 +17,8 @@ import org.enthusia.teleport.util.Messages;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.*;
 
 import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
@@ -26,7 +28,13 @@ public class MsgLogCommand implements CommandExecutor {
     private static final int PAGE_SIZE = 8;
     private static final long CACHE_TTL_MS = 10 * 60 * 1000L;
     private static final long CONTEXT_WINDOW_MS = 5 * 60 * 1000L;
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter TIME_FORMAT = new DateTimeFormatterBuilder()
+            .appendValue(ChronoField.HOUR_OF_DAY, 2)
+            .appendLiteral(':')
+            .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
+            .appendLiteral(':')
+            .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
+            .toFormatter();
 
     private final EnthusiaTeleportPlugin plugin;
     private final MessageLogManager logManager;

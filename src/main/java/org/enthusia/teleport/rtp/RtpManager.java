@@ -20,13 +20,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class RtpManager {
 
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
-    private final Map<UUID, Integer> uses = new HashMap<>();
+    private final Map<UUID, Integer> uses = new ConcurrentHashMap<>();
     private final Queue<RtpSearch> queuedSearches = new ArrayDeque<>();
     private final List<RtpSearch> activeSearches = new ArrayList<>();
     private final List<RecentRtp> recentRtp = new ArrayList<>();

@@ -18,12 +18,13 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LastLocationManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
-    private final Map<UUID, SavedLocation> lastLocations = new HashMap<>();
+    private final Map<UUID, SavedLocation> lastLocations = new ConcurrentHashMap<>();
     private final java.util.Queue<UUID> backstopQueue = new java.util.ArrayDeque<>();
     private boolean dirty;
     private boolean saveInProgress;

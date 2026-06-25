@@ -9,15 +9,15 @@ import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CombatTagManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
     private final CombatLogXHook combatLogXHook;
-    private final Map<UUID, Long> combatUntil = new HashMap<>();
+    private final Map<UUID, Long> combatUntil = new ConcurrentHashMap<>();
 
     private boolean enabled;
     private long tagMillis;

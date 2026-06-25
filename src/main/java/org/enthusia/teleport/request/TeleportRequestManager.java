@@ -14,12 +14,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TeleportRequestManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
-    private final Map<UUID, Map<UUID, TeleportRequest>> outgoing = new HashMap<>();
-    private final Map<UUID, Map<UUID, TeleportRequest>> incoming = new HashMap<>();
+    private final Map<UUID, Map<UUID, TeleportRequest>> outgoing = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<UUID, TeleportRequest>> incoming = new ConcurrentHashMap<>();
 
     public TeleportRequestManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -202,10 +203,10 @@ public class TeleportRequestManager implements Listener {
     }
 
     private Map<UUID, TeleportRequest> getOutgoingMap(UUID senderId) {
-        return outgoing.computeIfAbsent(senderId, unused -> new HashMap<>());
+        return outgoing.computeIfAbsent(senderId, unused -> new ConcurrentHashMap<>());
     }
 
     private Map<UUID, TeleportRequest> getIncomingMap(UUID targetId) {
-        return incoming.computeIfAbsent(targetId, unused -> new HashMap<>());
+        return incoming.computeIfAbsent(targetId, unused -> new ConcurrentHashMap<>());
     }
 }

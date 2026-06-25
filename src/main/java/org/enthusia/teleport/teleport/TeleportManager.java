@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 public class TeleportManager implements TeleportApi, Listener {
@@ -89,10 +90,10 @@ public class TeleportManager implements TeleportApi, Listener {
     private final EnthusiaTeleportPlugin plugin;
     private final Messages messages;
     private final BackManager backManager;
-    private final Map<UUID, Double> warmupModifiers = new HashMap<>();
-    private final Map<UUID, Double> cooldownModifiers = new HashMap<>();
-    private final Map<UUID, Long> cooldownUntil = new HashMap<>();
-    private final Map<UUID, ActiveTeleport> activeTeleports = new HashMap<>();
+    private final Map<UUID, Double> warmupModifiers = new ConcurrentHashMap<>();
+    private final Map<UUID, Double> cooldownModifiers = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> cooldownUntil = new ConcurrentHashMap<>();
+    private final Map<UUID, ActiveTeleport> activeTeleports = new ConcurrentHashMap<>();
 
     private SafeLocationFinder safeFinder;
     private double baseWarmupSeconds;

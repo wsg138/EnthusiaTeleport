@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageLogManager {
 
@@ -46,12 +47,12 @@ public class MessageLogManager {
     public record QueryResult(List<LogEntry> entries, int filesScanned, long linesRead, long durationMillis) {
     }
 
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private final EnthusiaTeleportPlugin plugin;
     private final Path logDir;
     private final Object writeLock = new Object();
-    private final Map<UUID, CachedQuery> lastQueryByViewer = new HashMap<>();
+    private final Map<UUID, CachedQuery> lastQueryByViewer = new ConcurrentHashMap<>();
     private final Queue<LogEntry> queue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     public MessageLogManager(EnthusiaTeleportPlugin plugin) {

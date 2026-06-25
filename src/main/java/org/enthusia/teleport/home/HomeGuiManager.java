@@ -67,9 +67,9 @@ public class HomeGuiManager implements Listener {
                 List<String> lore = new ArrayList<>();
                 lore.add(ChatColor.GRAY + "World: " + ChatColor.YELLOW + home.getWorldName());
                 lore.add(ChatColor.GRAY + String.format("X: %s Y: %s Z: %s",
-                        ChatColor.YELLOW + String.format("%.1f", home.getX()),
-                        ChatColor.YELLOW + String.format("%.1f", home.getY()),
-                        ChatColor.YELLOW + String.format("%.1f", home.getZ())
+                        ChatColor.YELLOW + formatCoordinate(home.getX()),
+                        ChatColor.YELLOW + formatCoordinate(home.getY()),
+                        ChatColor.YELLOW + formatCoordinate(home.getZ())
                 ));
                 lore.add(ChatColor.DARK_GRAY + "Click to teleport.");
                 meta.setLore(lore);
@@ -163,9 +163,9 @@ public class HomeGuiManager implements Listener {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "World: " + ChatColor.YELLOW + home.getWorldName());
             lore.add(ChatColor.GRAY + String.format("X: %s Y: %s Z: %s",
-                    ChatColor.YELLOW + String.format("%.1f", home.getX()),
-                    ChatColor.YELLOW + String.format("%.1f", home.getY()),
-                    ChatColor.YELLOW + String.format("%.1f", home.getZ())
+                    ChatColor.YELLOW + formatCoordinate(home.getX()),
+                    ChatColor.YELLOW + formatCoordinate(home.getY()),
+                    ChatColor.YELLOW + formatCoordinate(home.getZ())
             ));
             lore.add(ChatColor.DARK_GRAY + "Click to teleport.");
             if (canDelete) {
@@ -175,6 +175,10 @@ public class HomeGuiManager implements Listener {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private String formatCoordinate(double value) {
+        return Double.toString(Math.round(value * 10.0D) / 10.0D);
     }
 
     private ItemStack buildConfirmItem(int selected, int limit) {
