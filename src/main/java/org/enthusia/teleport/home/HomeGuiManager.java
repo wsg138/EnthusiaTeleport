@@ -21,7 +21,13 @@ import org.enthusia.teleport.util.Messages;
 
 import java.util.*;
 
-public class HomeGuiManager implements Listener {
+public final class HomeGuiManager implements Listener {
+    private static final String PLACEHOLDER_TARGET = "target";
+    private static final String PLACEHOLDER_NAME = "name";
+    private static final int INVENTORY_ROW_SIZE = 9;
+    private static final int MIN_GUI_SIZE = 9;
+    private static final int MAX_GUI_SIZE = 54;
+    private static final int COORDINATE_DECIMAL_FACTOR = 10;
 
     private final EnthusiaTeleportPlugin plugin;
 
@@ -45,10 +51,7 @@ public class HomeGuiManager implements Listener {
             return;
         }
 
-        int count = homes.size();
-        int size = ((count - 1) / 9 + 1) * 9;
-        if (size < 9) size = 9;
-        if (size > 54) size = 54;
+        int size = inventorySizeFor(homes.size());
 
         String title = msg.color(msg.rawOr("home.gui.title", "&2Your Homes"));
 
@@ -92,10 +95,7 @@ public class HomeGuiManager implements Listener {
             return;
         }
 
-        int count = homes.size();
-        int size = ((count - 1) / 9 + 1) * 9;
-        if (size < 9) size = 9;
-        if (size > 54) size = 54;
+        int size = inventorySizeFor(homes.size());
 
         String rawTitle = msg.rawOr("admin.homes.gui.title", "&2Homes: &e{target}");
         String title = msg.color(rawTitle.replace("{target}", targetName));
@@ -118,9 +118,7 @@ public class HomeGuiManager implements Listener {
         Collection<Home> homes = hm.getHomes(player.getUniqueId());
         int limit = hm.getHomeLimit(player);
 
-        int size = ((Math.max(1, homes.size()) - 1) / 9 + 1) * 9;
-        if (size < 9) size = 9;
-        if (size > 54) size = 54;
+        int size = inventorySizeFor(Math.max(1, homes.size()));
 
         String title = msg.color(msg.rawOr("home.limit-select.title", "&cChoose homes to keep"));
 
@@ -155,6 +153,11 @@ public class HomeGuiManager implements Listener {
         return item;
     }
 
+    private int inventorySizeFor(int itemCount) {
+        int size = ((itemCount - 1) / INVENTORY_ROW_SIZE + 1) * INVENTORY_ROW_SIZE;
+        return Math.min(MAX_GUI_SIZE, Math.max(MIN_GUI_SIZE, size));
+    }
+
     private ItemStack buildAdminHomeItem(Home home, boolean canDelete) {
         ItemStack item = new ItemStack(Material.OAK_DOOR);
         ItemMeta meta = item.getItemMeta();
@@ -178,7 +181,7 @@ public class HomeGuiManager implements Listener {
     }
 
     private String formatCoordinate(double value) {
-        return Double.toString(Math.round(value * 10.0D) / 10.0D);
+        return Double.toString(Math.round(value * COORDINATE_DECIMAL_FACTOR) / (double) COORDINATE_DECIMAL_FACTOR);
     }
 
     private ItemStack buildConfirmItem(int selected, int limit) {
@@ -296,130 +299,140 @@ public class HomeGuiManager implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (event.getInventory().getHolder() instanceof HomeGuiHolder holder) {
-            event.setCancelled(true); // always cancel in this GUI
-
-            if (!holder.getOwner().equals(player.getUniqueId())) {
-                return;
-            }
-
-            ItemStack clicked = event.getCurrentItem();
-            if (clicked == null || clicked.getType().isAir()) return;
-
-            ItemMeta meta = clicked.getItemMeta();
-            if (meta == null || !meta.hasDisplayName()) return;
-
-            String rawName = ChatColor.stripColor(meta.getDisplayName());
-            if (rawName == null || rawName.isEmpty()) return;
-
-            String homeName = rawName.toLowerCase(Locale.ROOT);
-
-            teleportToHome(player, homeName, false);
+            handleHomeGuiClick(event, player, holder);
             return;
         }
 
         if (event.getInventory().getHolder() instanceof AdminHomeGuiHolder holder) {
-            event.setCancelled(true);
-
-            if (!holder.getViewer().equals(player.getUniqueId())) {
-                return;
-            }
-
-            ItemStack clicked = event.getCurrentItem();
-            if (clicked == null || clicked.getType().isAir()) return;
-
-            ItemMeta meta = clicked.getItemMeta();
-            if (meta == null || !meta.hasDisplayName()) return;
-
-            String rawName = ChatColor.stripColor(meta.getDisplayName());
-            if (rawName == null || rawName.isEmpty()) return;
-
-            String homeName = rawName.toLowerCase(Locale.ROOT);
-            HomeManager hm = plugin.getHomeManager();
-            Home home = hm.getHome(holder.getTarget(), homeName);
-            if (home == null) {
-                plugin.getMessages().send(player, "home.unknown", Map.of("name", homeName));
-                return;
-            }
-
-            if (event.isShiftClick() && event.isRightClick()) {
-                if (!player.hasPermission("enthusia.teleport.admin.homes.delete")) {
-                    plugin.getMessages().send(player, "generic.no-permission");
-                    return;
-                }
-
-                hm.deleteHome(holder.getTarget(), homeName);
-                hm.saveAll();
-                plugin.getMessages().send(player, "admin.homes.deleted",
-                        Map.of("target", holder.getTargetName(), "name", home.getName()));
-                plugin.getAdminLogManager().logHomeDelete(player, Bukkit.getOfflinePlayer(holder.getTarget()), home);
-
-                event.getInventory().setItem(event.getSlot(), null);
-                if (isInventoryEmpty(event.getInventory())) {
-                    player.closeInventory();
-                    plugin.getMessages().send(player, "admin.homes.no-homes",
-                            Map.of("target", holder.getTargetName()));
-                }
-                return;
-            }
-
-            teleportAdminToHome(player, Bukkit.getOfflinePlayer(holder.getTarget()), home);
+            handleAdminHomeGuiClick(event, player, holder);
             return;
         }
 
         if (event.getInventory().getHolder() instanceof HomeLimitGuiHolder holder) {
-            event.setCancelled(true);
-
-            if (!holder.getOwner().equals(player.getUniqueId())) {
-                return;
-            }
-
-            ItemStack clicked = event.getCurrentItem();
-            if (clicked == null || clicked.getType().isAir()) return;
-
-            int limit = holder.getLimit();
-            int size = event.getInventory().getSize();
-
-            if (event.getSlot() == size - 1) {
-                if (holder.getSelected().size() != limit) {
-                    return;
-                }
-
-                HomeManager hm = plugin.getHomeManager();
-                Set<String> selected = holder.getSelected();
-                for (Home home : hm.getHomes(player.getUniqueId())) {
-                    if (!selected.contains(home.getName())) {
-                        hm.deleteHome(player.getUniqueId(), home.getName());
-                    }
-                }
-                hm.saveAll();
-
-                player.closeInventory();
-                plugin.getMessages().send(player, "home.limit-select.done");
-                return;
-            }
-
-            ItemMeta meta = clicked.getItemMeta();
-            if (meta == null || !meta.hasDisplayName()) return;
-
-            String rawName = ChatColor.stripColor(meta.getDisplayName());
-            if (rawName == null || rawName.isEmpty()) return;
-
-            String homeName = rawName.toLowerCase(Locale.ROOT);
-            Set<String> selected = holder.getSelected();
-
-            if (selected.contains(homeName)) {
-                selected.remove(homeName);
-                event.getInventory().setItem(event.getSlot(), buildHomeItem(homeName, false));
-            } else {
-                if (selected.size() >= limit) {
-                    return;
-                }
-                selected.add(homeName);
-                event.getInventory().setItem(event.getSlot(), buildHomeItem(homeName, true));
-            }
-
-            event.getInventory().setItem(size - 1, buildConfirmItem(selected.size(), limit));
+            handleLimitGuiClick(event, player, holder);
         }
+    }
+
+    private void handleHomeGuiClick(InventoryClickEvent event, Player player, HomeGuiHolder holder) {
+        event.setCancelled(true);
+        if (!holder.getOwner().equals(player.getUniqueId())) {
+            return;
+        }
+        clickedHomeName(event).ifPresent(homeName -> teleportToHome(player, homeName, false));
+    }
+
+    private void handleAdminHomeGuiClick(InventoryClickEvent event, Player player, AdminHomeGuiHolder holder) {
+        event.setCancelled(true);
+        if (!holder.getViewer().equals(player.getUniqueId())) {
+            return;
+        }
+        clickedHomeName(event).ifPresent(homeName -> handleAdminHomeSelection(event, player, holder, homeName));
+    }
+
+    private void handleAdminHomeSelection(InventoryClickEvent event, Player player, AdminHomeGuiHolder holder, String homeName) {
+        HomeManager hm = plugin.getHomeManager();
+        Home home = hm.getHome(holder.getTarget(), homeName);
+        if (home == null) {
+            plugin.getMessages().send(player, "home.unknown", Map.of(PLACEHOLDER_NAME, homeName));
+            return;
+        }
+
+        if (event.isShiftClick() && event.isRightClick()) {
+            deleteAdminHome(event, player, holder, hm, homeName, home);
+            return;
+        }
+
+        teleportAdminToHome(player, Bukkit.getOfflinePlayer(holder.getTarget()), home);
+    }
+
+    private void deleteAdminHome(InventoryClickEvent event, Player player, AdminHomeGuiHolder holder, HomeManager hm, String homeName, Home home) {
+        if (!player.hasPermission("enthusia.teleport.admin.homes.delete")) {
+            plugin.getMessages().send(player, "generic.no-permission");
+            return;
+        }
+
+        hm.deleteHome(holder.getTarget(), homeName);
+        hm.saveAll();
+        plugin.getMessages().send(player, "admin.homes.deleted",
+                Map.of(PLACEHOLDER_TARGET, holder.getTargetName(), PLACEHOLDER_NAME, home.getName()));
+        plugin.getAdminLogManager().logHomeDelete(player, Bukkit.getOfflinePlayer(holder.getTarget()), home);
+
+        event.getInventory().setItem(event.getSlot(), null);
+        if (isInventoryEmpty(event.getInventory())) {
+            player.closeInventory();
+            plugin.getMessages().send(player, "admin.homes.no-homes",
+                    Map.of(PLACEHOLDER_TARGET, holder.getTargetName()));
+        }
+    }
+
+    private void handleLimitGuiClick(InventoryClickEvent event, Player player, HomeLimitGuiHolder holder) {
+        event.setCancelled(true);
+        if (!holder.getOwner().equals(player.getUniqueId()) || isEmptyClick(event)) {
+            return;
+        }
+
+        int size = event.getInventory().getSize();
+        if (event.getSlot() == size - 1) {
+            confirmLimitSelection(player, holder);
+            return;
+        }
+        clickedHomeName(event).ifPresent(homeName -> toggleLimitSelection(event, holder, homeName, size));
+    }
+
+    private void confirmLimitSelection(Player player, HomeLimitGuiHolder holder) {
+        if (holder.getSelected().size() != holder.getLimit()) {
+            return;
+        }
+
+        HomeManager hm = plugin.getHomeManager();
+        Set<String> selected = holder.getSelected();
+        for (Home home : hm.getHomes(player.getUniqueId())) {
+            if (!selected.contains(home.getName())) {
+                hm.deleteHome(player.getUniqueId(), home.getName());
+            }
+        }
+        hm.saveAll();
+
+        player.closeInventory();
+        plugin.getMessages().send(player, "home.limit-select.done");
+    }
+
+    private void toggleLimitSelection(InventoryClickEvent event, HomeLimitGuiHolder holder, String homeName, int size) {
+        Set<String> selected = holder.getSelected();
+
+        if (selected.contains(homeName)) {
+            selected.remove(homeName);
+            event.getInventory().setItem(event.getSlot(), buildHomeItem(homeName, false));
+        } else {
+            if (selected.size() >= holder.getLimit()) {
+                return;
+            }
+            selected.add(homeName);
+            event.getInventory().setItem(event.getSlot(), buildHomeItem(homeName, true));
+        }
+
+        event.getInventory().setItem(size - 1, buildConfirmItem(selected.size(), holder.getLimit()));
+    }
+
+    private Optional<String> clickedHomeName(InventoryClickEvent event) {
+        ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || clicked.getType().isAir()) {
+            return Optional.empty();
+        }
+        ItemMeta meta = clicked.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) {
+            return Optional.empty();
+        }
+        String rawName = ChatColor.stripColor(meta.getDisplayName());
+        if (rawName == null || rawName.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(rawName.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean isEmptyClick(InventoryClickEvent event) {
+        ItemStack clicked = event.getCurrentItem();
+        return clicked == null || clicked.getType().isAir();
     }
 
     @EventHandler
