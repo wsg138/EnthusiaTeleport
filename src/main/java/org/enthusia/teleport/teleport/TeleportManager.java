@@ -33,11 +33,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-public class TeleportManager implements TeleportApi, Listener {
+public final class TeleportManager implements TeleportApi, Listener {
 
     private static final String BYPASS_COMBAT_PERMISSION = "enthusia.teleport.bypass-combat";
     private static final String BYPASS_TELEPORT_PERMISSION = "enthusia.teleport.bypass-teleport";
     private static final String BYPASS_WORLD_BLOCK_PERMISSION = "enthusia.teleport.bypass-world-block";
+    private static final double INSTANT_WARMUP_THRESHOLD_SECONDS = 0.05D;
+    private static final double TICKS_PER_SECOND = 20.0D;
+    private static final long MILLIS_PER_SECOND = 1000L;
 
     public enum CancelReason {
         MOVE,
@@ -233,32 +236,45 @@ public class TeleportManager implements TeleportApi, Listener {
                                String warmupKey,
                                Runnable onSuccess,
                                TeleportFlags flags) {
-        if (player == null) {
-            return;
-        }
-
-        CombatTagManager combat = plugin.getCombatManager();
-        if (combat != null && combat.isInCombat(player) && !player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
-            messages.send(player, "teleport.combat-blocked");
+        if (rejectTeleportStart(player, flags)) {
             return;
         }
 
         boolean bypassAll = hasBypassTeleport(player);
         boolean bypassCooldown = bypassAll || flags.bypassCooldown;
         boolean bypassWarmup = bypassAll || flags.bypassWarmup;
-
-        if (!bypassCooldown && checkAndNotifyCooldown(player)) {
-            return;
-        }
-
         double warmup = bypassWarmup ? 0.0D : getEffectiveWarmupSeconds(player.getUniqueId());
-        if (warmup <= 0.05D) {
-            if (doTeleport(player, targetSupplier.get(), useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && onSuccess != null) {
-                onSuccess.run();
-            }
+        if (warmup <= INSTANT_WARMUP_THRESHOLD_SECONDS) {
+            completeTeleport(player, targetSupplier.get(), useSafeSearch, anchor, !bypassCooldown, flags.recordBack, onSuccess);
             return;
         }
 
+        scheduleWarmup(player, targetSupplier, useSafeSearch, anchor, warmupKey, onSuccess, flags, bypassCooldown, warmup);
+    }
+
+    private boolean rejectTeleportStart(Player player, TeleportFlags flags) {
+        if (player == null) {
+            return true;
+        }
+        CombatTagManager combat = plugin.getCombatManager();
+        if (combat != null && combat.isInCombat(player) && !player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+            messages.send(player, "teleport.combat-blocked");
+            return true;
+        }
+        boolean bypassAll = hasBypassTeleport(player);
+        boolean bypassCooldown = bypassAll || flags.bypassCooldown;
+        return !bypassCooldown && checkAndNotifyCooldown(player);
+    }
+
+    private void scheduleWarmup(Player player,
+                                Supplier<Location> targetSupplier,
+                                boolean useSafeSearch,
+                                Player anchor,
+                                String warmupKey,
+                                Runnable onSuccess,
+                                TeleportFlags flags,
+                                boolean bypassCooldown,
+                                double warmup) {
         cancelTeleport(player.getUniqueId(), null);
         messages.send(player, warmupKey, Map.of("seconds", String.format(java.util.Locale.US, "%.1f", warmup)));
 
@@ -268,13 +284,24 @@ public class TeleportManager implements TeleportApi, Listener {
             public void run() {
                 ActiveTeleport active = activeTeleports.remove(player.getUniqueId());
                 Location liveTarget = targetSupplier.get();
-                if (doTeleport(player, liveTarget, useSafeSearch, anchor, !bypassCooldown, flags.recordBack) && active != null && active.onSuccess != null) {
-                    active.onSuccess.run();
-                }
+                Runnable callback = active == null ? null : active.onSuccess;
+                completeTeleport(player, liveTarget, useSafeSearch, anchor, !bypassCooldown, flags.recordBack, callback);
             }
-        }.runTaskLater(plugin, (long) Math.ceil(warmup * 20.0D));
+        }.runTaskLater(plugin, (long) Math.ceil(warmup * TICKS_PER_SECOND));
 
         activeTeleports.put(player.getUniqueId(), new ActiveTeleport(player.getUniqueId(), origin, task, anchor, onSuccess));
+    }
+
+    private void completeTeleport(Player player,
+                                  Location target,
+                                  boolean useSafeSearch,
+                                  Player anchor,
+                                  boolean applyCooldown,
+                                  boolean recordBack,
+                                  Runnable onSuccess) {
+        if (doTeleport(player, target, useSafeSearch, anchor, applyCooldown, recordBack) && onSuccess != null) {
+            onSuccess.run();
+        }
     }
 
     public void cancelTeleport(UUID playerId, CancelReason reason) {
@@ -308,6 +335,8 @@ public class TeleportManager implements TeleportApi, Listener {
             case RELOAD, DISABLE -> {
                 messages.send(player, "teleport.cancelled-reload");
                 notifyAnchor(active, "teleport.cancelled-reload-other", player);
+            }
+            default -> {
             }
         }
     }
@@ -356,29 +385,10 @@ public class TeleportManager implements TeleportApi, Listener {
         if (!player.isOnline()) {
             return false;
         }
-        if (target == null || target.getWorld() == null) {
-            messages.send(player, "teleport.safe-fallback-failed");
-            return false;
-        }
 
         Location from = player.getLocation().clone();
-        Location destination = target.clone();
-
-        if (useSafeSearch) {
-            Location safe = safeFinder.findSafeTeleportLocation(target);
-            if (safe == null) {
-                messages.send(player, "teleport.safe-fallback-failed");
-                return false;
-            }
-            destination = safe;
-            if (anchor != null && anchor.isOnline() && !sameBlock(anchor.getLocation(), target)) {
-                messages.send(anchor, "teleport.anchor-unsafe", Map.of("teleporter", player.getName()));
-            }
-        }
-
-        World world = destination.getWorld();
-        if (world != null && blockedTargetWorlds.contains(world.getName().toLowerCase(java.util.Locale.ROOT)) && !player.hasPermission(BYPASS_WORLD_BLOCK_PERMISSION)) {
-            messages.send(player, "teleport.world-blocked", Map.of("world", world.getName()));
+        Location destination = resolveDestination(player, target, useSafeSearch, anchor);
+        if (destination == null || rejectBlockedWorld(player, destination)) {
             return false;
         }
 
@@ -393,41 +403,90 @@ public class TeleportManager implements TeleportApi, Listener {
             return false;
         }
 
-        if (!passengers.isEmpty()) {
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                for (Entity passenger : passengers) {
-                    if (passenger != null && !passenger.isDead()) {
-                        player.addPassenger(passenger);
-                    }
-                }
-            });
-        }
+        restorePassengers(player, passengers);
 
         messages.send(player, "teleport.teleported");
-        if (anchor != null && anchor.isOnline()) {
-            messages.send(player, "teleport.teleported-to-player", Map.of("target", anchor.getName()));
-            if (!isHidden(player)) {
-                messages.send(anchor, "teleport.teleported-from-player", Map.of("teleporter", player.getName()));
-            }
-            playTeleportSound(player);
-            if (!isHidden(player)) {
-                playTeleportSound(anchor);
-            }
-        }
+        notifyTeleportComplete(player, anchor);
+        recordBackIfNeeded(player, from, destination, recordBack);
+        applyCooldownIfNeeded(player, applyCooldown);
+        return true;
+    }
 
+    private Location resolveDestination(Player player, Location target, boolean useSafeSearch, Player anchor) {
+        if (target == null || target.getWorld() == null) {
+            messages.send(player, "teleport.safe-fallback-failed");
+            return null;
+        }
+        if (!useSafeSearch) {
+            return target.clone();
+        }
+        Location safe = safeFinder.findSafeTeleportLocation(target);
+        if (safe == null) {
+            messages.send(player, "teleport.safe-fallback-failed");
+            return null;
+        }
+        if (anchor != null && anchor.isOnline() && !sameBlock(anchor.getLocation(), target)) {
+            messages.send(anchor, "teleport.anchor-unsafe", Map.of("teleporter", player.getName()));
+        }
+        return safe;
+    }
+
+    private boolean rejectBlockedWorld(Player player, Location destination) {
+        World world = destination.getWorld();
+        if (world == null || !blockedTargetWorlds.contains(world.getName().toLowerCase(java.util.Locale.ROOT))) {
+            return false;
+        }
+        if (player.hasPermission(BYPASS_WORLD_BLOCK_PERMISSION)) {
+            return false;
+        }
+        messages.send(player, "teleport.world-blocked", Map.of("world", world.getName()));
+        return true;
+    }
+
+    private void restorePassengers(Player player, List<Entity> passengers) {
+        if (passengers.isEmpty()) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Entity passenger : passengers) {
+                if (passenger != null && !passenger.isDead()) {
+                    player.addPassenger(passenger);
+                }
+            }
+        });
+    }
+
+    private void notifyTeleportComplete(Player player, Player anchor) {
+        if (anchor == null || !anchor.isOnline()) {
+            return;
+        }
+        messages.send(player, "teleport.teleported-to-player", Map.of("target", anchor.getName()));
+        boolean hidden = isHidden(player);
+        if (!hidden) {
+            messages.send(anchor, "teleport.teleported-from-player", Map.of("teleporter", player.getName()));
+        }
+        playTeleportSound(player);
+        if (!hidden) {
+            playTeleportSound(anchor);
+        }
+    }
+
+    private void recordBackIfNeeded(Player player, Location from, Location destination, boolean recordBack) {
         if (recordBack && backManager != null && !sameBlock(from, destination)) {
             backManager.record(player, from);
         }
+    }
+
+    private void applyCooldownIfNeeded(Player player, boolean applyCooldown) {
         if (applyCooldown) {
             applyCooldown(player);
         }
-        return true;
     }
 
     private void applyCooldown(Player player) {
         int seconds = getEffectiveCooldownSeconds(player.getUniqueId());
         if (seconds > 0) {
-            cooldownUntil.put(player.getUniqueId(), System.currentTimeMillis() + seconds * 1000L);
+            cooldownUntil.put(player.getUniqueId(), System.currentTimeMillis() + seconds * MILLIS_PER_SECOND);
         }
     }
 
