@@ -16,20 +16,21 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class HomeManager {
+@SuppressWarnings("PMD.AvoidInstantiatingObjectsInLoops")
+public final class HomeManager {
 
-    private static final DateTimeFormatter BACKUP_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    private static final DateTimeFormatter BACKUP_TIMESTAMP = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
-    private final Map<UUID, Map<String, Home>> homes = new HashMap<>();
+    private final Map<UUID, Map<String, Home>> homes = new ConcurrentHashMap<>();
     private boolean dirty;
     private boolean saveInProgress;
 
@@ -184,30 +185,17 @@ public class HomeManager {
 
     private void load() {
         homes.clear();
-        if (!file.exists()) {
-            try {
-                file.getParentFile().mkdirs();
-                file.createNewFile();
-            } catch (IOException ignored) {
-            }
-        }
+        ensureHomesFileExists();
 
-        YamlConfiguration config;
-        try {
-            config = YamlConfiguration.loadConfiguration(file);
-        } catch (RuntimeException exception) {
-            File backup = backupUnreadableHomesFile();
-            plugin.getLogger().severe("Could not load homes.yml, so homes were left empty for this startup. "
-                    + "The unreadable file was moved to " + backup.getName() + ". Cause: " + exception.getMessage());
+        YamlConfiguration config = loadHomesConfiguration();
+        if (config == null) {
             return;
         }
-        boolean dirty = false;
+        boolean repaired = false;
 
         for (String key : config.getKeys(false)) {
-            UUID owner;
-            try {
-                owner = UUID.fromString(key);
-            } catch (IllegalArgumentException ignored) {
+            UUID owner = parseOwnerId(key);
+            if (owner == null) {
                 continue;
             }
 
@@ -216,58 +204,103 @@ public class HomeManager {
                 continue;
             }
 
-            List<Home> loadedHomes = new ArrayList<>();
-            for (String homeKey : ownerSection.getKeys(false)) {
-                ConfigurationSection homeSection = ownerSection.getConfigurationSection(homeKey);
-                if (homeSection == null) {
-                    continue;
-                }
-
-                String displayName = homeSection.getString("name", homeKey);
-                String normalized = normalizeName(displayName);
-                if (normalized.isEmpty() || normalized.contains(".")) {
-                    dirty = true;
-                    continue;
-                }
-                String worldName = homeSection.getString("world");
-                if (worldName == null || worldName.isBlank()) {
-                    continue;
-                }
-
-                long createdAt = homeSection.getLong("created", 0L);
-                if (createdAt <= 0L) {
-                    createdAt = System.currentTimeMillis();
-                    dirty = true;
-                }
-
-                loadedHomes.add(new Home(
-                        owner,
-                        normalized,
-                        displayName,
-                        worldName,
-                        homeSection.getDouble("x"),
-                        homeSection.getDouble("y"),
-                        homeSection.getDouble("z"),
-                        (float) homeSection.getDouble("yaw"),
-                        (float) homeSection.getDouble("pitch"),
-                        createdAt
-                ));
-            }
-
-            if (loadedHomes.isEmpty()) {
-                continue;
-            }
-
-            loadedHomes.sort(Comparator.comparingLong(Home::getCreatedAt).thenComparing(Home::getName, String.CASE_INSENSITIVE_ORDER));
-            Map<String, Home> ownerHomes = homes.computeIfAbsent(owner, unused -> new LinkedHashMap<>());
-            for (Home home : loadedHomes) {
-                ownerHomes.put(home.getKey(), home);
+            LoadResult result = loadOwnerHomes(owner, ownerSection);
+            repaired |= result.repaired();
+            if (!result.homes().isEmpty()) {
+                putLoadedHomes(owner, result.homes());
             }
         }
 
-        if (dirty) {
+        if (repaired) {
             writeSnapshot(snapshot());
             this.dirty = false;
+        }
+    }
+
+    private void ensureHomesFileExists() {
+        if (!file.exists()) {
+            try {
+                file.getParentFile().mkdirs();
+                file.createNewFile();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    private YamlConfiguration loadHomesConfiguration() {
+        try {
+            return YamlConfiguration.loadConfiguration(file);
+        } catch (RuntimeException exception) {
+            File backup = backupUnreadableHomesFile();
+            plugin.getLogger().severe("Could not load homes.yml, so homes were left empty for this startup. "
+                    + "The unreadable file was moved to " + backup.getName() + ". Cause: " + exception.getMessage());
+            return null;
+        }
+    }
+
+    private UUID parseOwnerId(String key) {
+        try {
+            return UUID.fromString(key);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private LoadResult loadOwnerHomes(UUID owner, ConfigurationSection ownerSection) {
+        List<Home> loadedHomes = new ArrayList<>();
+        boolean repaired = false;
+        for (String homeKey : ownerSection.getKeys(false)) {
+            ConfigurationSection homeSection = ownerSection.getConfigurationSection(homeKey);
+            if (homeSection == null) {
+                continue;
+            }
+
+            HomeLoad homeLoad = loadHome(owner, homeKey, homeSection);
+            repaired |= homeLoad.repaired();
+            if (homeLoad.home() != null) {
+                loadedHomes.add(homeLoad.home());
+            }
+        }
+        loadedHomes.sort(Comparator.comparingLong(Home::getCreatedAt).thenComparing(Home::getName, String.CASE_INSENSITIVE_ORDER));
+        return new LoadResult(loadedHomes, repaired);
+    }
+
+    private HomeLoad loadHome(UUID owner, String homeKey, ConfigurationSection homeSection) {
+        String displayName = homeSection.getString("name", homeKey);
+        String normalized = normalizeName(displayName);
+        if (normalized.isEmpty() || normalized.contains(".")) {
+            return HomeLoad.repairedOnly();
+        }
+        String worldName = homeSection.getString("world");
+        if (worldName == null || worldName.isBlank()) {
+            return HomeLoad.empty();
+        }
+
+        long createdAt = homeSection.getLong("created", 0L);
+        boolean repaired = false;
+        if (createdAt <= 0L) {
+            createdAt = System.currentTimeMillis();
+            repaired = true;
+        }
+
+        return new HomeLoad(new Home(
+                owner,
+                normalized,
+                displayName,
+                worldName,
+                homeSection.getDouble("x"),
+                homeSection.getDouble("y"),
+                homeSection.getDouble("z"),
+                (float) homeSection.getDouble("yaw"),
+                (float) homeSection.getDouble("pitch"),
+                createdAt
+        ), repaired);
+    }
+
+    private void putLoadedHomes(UUID owner, List<Home> loadedHomes) {
+        Map<String, Home> ownerHomes = homes.computeIfAbsent(owner, unused -> new LinkedHashMap<>());
+        for (Home home : loadedHomes) {
+            ownerHomes.put(home.getKey(), home);
         }
     }
 
@@ -284,7 +317,7 @@ public class HomeManager {
     }
 
     private File backupUnreadableHomesFile() {
-        String timestamp = LocalDateTime.now().format(BACKUP_TIMESTAMP);
+        String timestamp = LocalDateTime.now().format(BACKUP_TIMESTAMP).replace(':', '-');
         File backup = new File(file.getParentFile(), "homes-unreadable-" + timestamp + ".yml");
         int suffix = 1;
         while (backup.exists()) {
@@ -304,5 +337,18 @@ public class HomeManager {
 
     private String normalizeName(String name) {
         return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private record LoadResult(List<Home> homes, boolean repaired) {
+    }
+
+    private record HomeLoad(Home home, boolean repaired) {
+        private static HomeLoad empty() {
+            return new HomeLoad(null, false);
+        }
+
+        private static HomeLoad repairedOnly() {
+            return new HomeLoad(null, true);
+        }
     }
 }
