@@ -12,6 +12,10 @@ import org.enthusia.teleport.util.Messages;
 import java.util.Map;
 
 public class TpaCommand implements CommandExecutor {
+    private static final String TARGET_PLACEHOLDER = "target";
+    private static final String SECONDS_PLACEHOLDER = "seconds";
+    private static final String SENDER_PLACEHOLDER = "sender";
+    private static final int REQUIRED_ARGS = 1;
 
     private final EnthusiaTeleportPlugin plugin;
     private final boolean here;
@@ -30,7 +34,7 @@ public class TpaCommand implements CommandExecutor {
             return true;
         }
 
-        if (args.length < 1) {
+        if (args.length < REQUIRED_ARGS) {
             player.sendMessage("§cUsage: /" + label + " <player>");
             return true;
         }
@@ -39,7 +43,7 @@ public class TpaCommand implements CommandExecutor {
         Player target = Bukkit.getPlayerExact(targetName);
         if (target == null || !target.isOnline()) {
             msg.send(player, "teleport.request.player-not-found",
-                    Map.of("target", targetName));
+                    Map.of(TARGET_PLACEHOLDER, targetName));
             return true;
         }
 
@@ -54,13 +58,13 @@ public class TpaCommand implements CommandExecutor {
         // Only block if there's already a request from this sender to THIS target
         if (reqMgr.hasOutgoingTo(player, target)) {
             msg.send(player, "teleport.request.already-outgoing",
-                    Map.of("target", target.getName()));
+                    Map.of(TARGET_PLACEHOLDER, target.getName()));
             return true;
         }
 
         if (ignoreMgr.isIgnoring(target.getUniqueId(), player.getUniqueId())) {
             msg.send(player, "teleport.request.ignored-sender",
-                    Map.of("target", target.getName()));
+                    Map.of(TARGET_PLACEHOLDER, target.getName()));
             return true;
         }
 
@@ -71,20 +75,20 @@ public class TpaCommand implements CommandExecutor {
 
         if (here) {
             msg.send(player, "teleport.request.tpa-here-sent",
-                    Map.of("target", target.getName(), "seconds", String.valueOf(expirySeconds)));
+                    Map.of(TARGET_PLACEHOLDER, target.getName(), SECONDS_PLACEHOLDER, String.valueOf(expirySeconds)));
 
             msg.send(target, "teleport.request.to-receiver-here",
-                    Map.of("sender", player.getName()));
+                    Map.of(SENDER_PLACEHOLDER, player.getName()));
             msg.send(target, "teleport.request.to-receiver-here-extra",
-                    Map.of("sender", player.getName(), "seconds", String.valueOf(expirySeconds)));
+                    Map.of(SENDER_PLACEHOLDER, player.getName(), SECONDS_PLACEHOLDER, String.valueOf(expirySeconds)));
         } else {
             msg.send(player, "teleport.request.tpa-sent",
-                    Map.of("target", target.getName(), "seconds", String.valueOf(expirySeconds)));
+                    Map.of(TARGET_PLACEHOLDER, target.getName(), SECONDS_PLACEHOLDER, String.valueOf(expirySeconds)));
 
             msg.send(target, "teleport.request.to-receiver",
-                    Map.of("sender", player.getName()));
+                    Map.of(SENDER_PLACEHOLDER, player.getName()));
             msg.send(target, "teleport.request.to-receiver-extra",
-                    Map.of("sender", player.getName(), "seconds", String.valueOf(expirySeconds)));
+                    Map.of(SENDER_PLACEHOLDER, player.getName(), SECONDS_PLACEHOLDER, String.valueOf(expirySeconds)));
         }
 
         return true;
