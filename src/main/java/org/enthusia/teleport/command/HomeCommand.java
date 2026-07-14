@@ -35,6 +35,11 @@ public class HomeCommand implements CommandExecutor {
             return true;
         }
 
+        if (ignoresEqualCase(command.getName(), "homes")) {
+            plugin.getHomeGuiManager().openHomeGui(player);
+            return true;
+        }
+
         // /home teleports directly when there is only one possible destination.
         if (args.length == 0) {
             Collection<Home> homes = hm.getHomes(player.getUniqueId());

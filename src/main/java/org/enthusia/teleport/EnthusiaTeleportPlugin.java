@@ -209,6 +209,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         getCommand("home").setExecutor(new HomeCommand(this));
         getCommand("home").setTabCompleter(tabCompleter);
 
+        getCommand("homes").setExecutor(new HomeCommand(this));
+        getCommand("homes").setTabCompleter(tabCompleter);
+
         getCommand("delhome").setExecutor(new DelHomeCommand(this));
         getCommand("delhome").setTabCompleter(tabCompleter);
 
