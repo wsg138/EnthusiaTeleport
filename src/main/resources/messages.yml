@@ -106,7 +106,7 @@ admin.player-not-found: "&cPlayer &e{target}&c not found."
 admin.homes.cleared: "&aCleared all homes for &e{target}&a."
 admin.homes.deleted: "&aDeleted home &e{name}&a for &e{target}&a."
 admin.homes.teleported: "&aTeleported to &e{target}&a's home &e{name}&a."
-admin.homes.view-usage: "&cUsage: &e/ahome <player>"
+admin.homes.view-usage: "&cUsage: &e/ahome <player> &cor &e/homes <player>"
 admin.homes.no-homes: "&c{target} does not have any homes set."
 admin.homes.gui.title: "&2Homes: &e{target}"
 

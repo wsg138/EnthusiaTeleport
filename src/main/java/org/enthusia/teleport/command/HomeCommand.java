@@ -1,5 +1,7 @@
 package org.enthusia.teleport.command;
 
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
@@ -8,6 +10,7 @@ import org.enthusia.teleport.home.HomeManager;
 import org.enthusia.teleport.util.Messages;
 
 import java.util.Collection;
+import java.util.Map;
 
 import static org.enthusia.teleport.command.CommandStrings.ignoresEqualCase;
 
@@ -28,15 +31,15 @@ public class HomeCommand implements CommandExecutor {
             return true;
         }
 
+        if (ignoresEqualCase(command.getName(), "homes")) {
+            handleHomesCommand(player, args, msg);
+            return true;
+        }
+
         HomeManager hm = plugin.getHomeManager();
         if (hm.isOverLimit(player)) {
             plugin.getHomeGuiManager().openLimitGui(player);
             msg.send(player, "home.limit-select.required");
-            return true;
-        }
-
-        if (ignoresEqualCase(command.getName(), "homes")) {
-            plugin.getHomeGuiManager().openHomeGui(player);
             return true;
         }
 
@@ -62,5 +65,37 @@ public class HomeCommand implements CommandExecutor {
 
         plugin.getHomeGuiManager().teleportToHome(player, name, force);
         return true;
+    }
+
+    private void handleHomesCommand(Player player, String[] args, Messages msg) {
+        if (args.length == 0) {
+            HomeManager hm = plugin.getHomeManager();
+            if (hm.isOverLimit(player)) {
+                plugin.getHomeGuiManager().openLimitGui(player);
+                msg.send(player, "home.limit-select.required");
+                return;
+            }
+            plugin.getHomeGuiManager().openHomeGui(player);
+            return;
+        }
+
+        if (args.length != 1) {
+            msg.send(player, "admin.homes.view-usage");
+            return;
+        }
+
+        if (!player.hasPermission("enthusia.teleport.admin.homes.view")) {
+            msg.send(player, "generic.no-permission");
+            return;
+        }
+
+        String targetName = args[0];
+        OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+        if (target == null || (!target.isOnline() && !target.hasPlayedBefore())) {
+            msg.send(player, "admin.player-not-found", Map.of("target", targetName));
+            return;
+        }
+
+        plugin.getHomeGuiManager().openAdminHomeGui(player, target, targetName);
     }
 }

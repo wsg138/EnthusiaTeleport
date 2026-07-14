@@ -54,6 +54,7 @@ public class TeleportTabCompleter implements TabCompleter {
             case "tpaccept", "tpadeny" -> tabIncomingRequests(sender, args, 0);
             case "tpignore" -> tabTpIgnore(sender, args);
             case "home" -> tabHome(sender, args);
+            case "homes" -> tabHomes(sender, args);
             case "delhome" -> tabDelHome(sender, args);
             case "msg" -> tabMsgTargets(args);
             case "msglog" -> tabMsgLog(args);
@@ -167,6 +168,13 @@ public class TeleportTabCompleter implements TabCompleter {
         }
 
         return Collections.emptyList();
+    }
+
+    private List<String> tabHomes(CommandSender sender, String[] args) {
+        if (args.length != FIRST_ARGUMENT || !sender.hasPermission("enthusia.teleport.admin.homes.view")) {
+            return Collections.emptyList();
+        }
+        return plugin.getOfflineNameCache().suggest(args[0].toLowerCase(Locale.ROOT), false);
     }
 
     private List<String> tabDelHome(CommandSender sender, String[] args) {
