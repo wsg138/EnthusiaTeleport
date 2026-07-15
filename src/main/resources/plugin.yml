@@ -147,24 +147,6 @@ commands:
     aliases: [adminhome]
 
 permissions:
-  enthusia.teleport.*:
-    description: All core player teleport commands.
-    default: true
-    children:
-      enthusia.teleport.tpa: true
-      enthusia.teleport.tpahere: true
-      enthusia.teleport.tpaccept: true
-      enthusia.teleport.tpadeny: true
-      enthusia.teleport.tpacancel: true
-      enthusia.teleport.tpignore: true
-      enthusia.teleport.sethome: true
-      enthusia.teleport.home: true
-      enthusia.teleport.delhome: true
-      enthusia.teleport.bed: true
-      enthusia.teleport.spawn: true
-      enthusia.teleport.msg: true
-      enthusia.teleport.reply: true
-
   enthusia.teleport.admin:
     description: Admin commands for EnthusiaTeleport.
     default: op
