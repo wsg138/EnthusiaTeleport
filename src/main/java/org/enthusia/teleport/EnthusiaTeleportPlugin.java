@@ -191,8 +191,14 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         getCommand("tpaccept").setExecutor(new TpAcceptCommand(this));
         getCommand("tpaccept").setTabCompleter(tabCompleter);
 
+        getCommand("tpyes").setExecutor(new TpAcceptCommand(this));
+        getCommand("tpyes").setTabCompleter(tabCompleter);
+
         getCommand("tpadeny").setExecutor(new TpDenyCommand(this));
         getCommand("tpadeny").setTabCompleter(tabCompleter);
+
+        getCommand("tpno").setExecutor(new TpDenyCommand(this));
+        getCommand("tpno").setTabCompleter(tabCompleter);
 
         getCommand("tpacancel").setExecutor(new TpCancelCommand(this));
         getCommand("tpacancel").setTabCompleter(tabCompleter);
