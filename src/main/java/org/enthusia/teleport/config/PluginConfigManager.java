@@ -116,11 +116,6 @@ public class PluginConfigManager {
                         Math.max(1, config.getInt("logging.flush-interval-seconds", 5)),
                         Math.max(100, config.getInt("logging.max-queue-size", 5000))
                 ),
-                new PluginConfig.MsgLogSettings(
-                        Math.max(1, config.getInt("msglog.max-days-scanned", 7)),
-                        Math.max(1, config.getInt("msglog.max-results", 500)),
-                        Math.max(1, config.getInt("msglog.timeout-seconds", 10))
-                ),
                 new PluginConfig.LastLocationBackstopSettings(
                         Math.max(1, config.getInt("last-location-backstop.interval-minutes", 5)),
                         Math.max(1, config.getInt("last-location-backstop.max-players-per-tick", 10)),

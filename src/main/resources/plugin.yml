@@ -3,7 +3,7 @@ main: org.enthusia.teleport.EnthusiaTeleportPlugin
 version: 1.2.6
 api-version: "1.21"
 author: P2wn
-description: Teleport, home, spawn, messaging, and staff utility plugin for Enthusia.
+description: Teleport, home, spawn, and staff utility plugin for Enthusia. (Chat functionality removed in favor of RoseChat.)
 softdepend: [CombatLogX]
 
 commands:
@@ -119,22 +119,6 @@ commands:
     usage: /back
     permission: enthusia.teleport.back
 
-  msg:
-    description: Send a private message to one or more players.
-    usage: /msg <player[,player2,...]> <message>
-    permission: enthusia.teleport.msg
-    aliases: [w, whisper]
-
-  r:
-    description: Reply to the most recent player who messaged you.
-    usage: /r <message>
-    permission: enthusia.teleport.reply
-
-  msglog:
-    description: View recent private message logs.
-    usage: /msglog <duration> [page] [--from <player>] [--to <player>] [--contains <text>]
-    permission: enthusia.teleport.msglog
-
   eteleport:
     description: EnthusiaTeleport admin command.
     usage: /eteleport reload|performance|homes clear|homes del|homes tp
@@ -178,7 +162,6 @@ permissions:
       enthusia.teleport.rtp: true
       enthusia.teleport.back: true
       enthusia.teleport.tpo: true
-      enthusia.teleport.msglog: true
       enthusia.teleport.admin.reload: true
       enthusia.teleport.admin.homes.teleport: true
       enthusia.teleport.admin.homes.view: true
@@ -209,13 +192,7 @@ permissions:
     default: true
   enthusia.teleport.spawn:
     default: true
-  enthusia.teleport.msg:
-    default: true
-  enthusia.teleport.reply:
-    default: true
 
-  enthusia.teleport.msglog:
-    default: op
   enthusia.teleport.tppos:
     default: op
   enthusia.teleport.tpo:

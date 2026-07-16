@@ -29,7 +29,6 @@ public class TaskCoordinator {
         });
 
         scheduleRepeating("log-queue-flush", 20L, Math.max(1, config.logging().flushIntervalSeconds()) * 20L, () -> {
-            plugin.getMessageLogManager().flushQueuedAsync();
             plugin.getAdminLogManager().flushQueuedAsync();
         });
 
