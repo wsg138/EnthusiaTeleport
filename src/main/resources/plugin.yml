@@ -27,9 +27,19 @@ commands:
     usage: /tpaccept [player]
     permission: enthusia.teleport.tpaccept
 
+  tpyes:
+    description: Alias for /tpaccept.
+    usage: /tpyes [player]
+    permission: enthusia.teleport.tpaccept
+
   tpadeny:
     description: Deny a pending teleport request.
     usage: /tpadeny [player]
+    permission: enthusia.teleport.tpadeny
+
+  tpno:
+    description: Alias for /tpadeny.
+    usage: /tpno [player]
     permission: enthusia.teleport.tpadeny
 
   tpacancel:
