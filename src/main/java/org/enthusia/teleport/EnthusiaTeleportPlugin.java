@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.enthusia.teleport.api.TeleportApi;
+import org.enthusia.teleport.api.CancelReason;
 import org.enthusia.teleport.back.BackManager;
 import org.enthusia.teleport.combat.CombatTagManager;
 import org.enthusia.teleport.command.AdminHomeCommand;
@@ -95,6 +96,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         this.backManager = new BackManager(this);
         this.teleportManager = new TeleportManager(this);
         this.requestManager = new TeleportRequestManager(this);
+        this.teleportManager.setRequestManager(requestManager);
         this.rtpManager = new RtpManager(this);
         this.combatManager = new CombatTagManager(this);
         this.homeGuiManager = new HomeGuiManager(this);
@@ -138,7 +140,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         saveAllDataBlocking();
         messageLogManager.flushBlocking();
         adminLogManager.flushBlocking();
-        teleportManager.cancelAll(TeleportManager.CancelReason.RELOAD);
+        teleportManager.cancelAll(CancelReason.RELOAD);
         requestManager.cancelAllForReload();
 
         pluginConfigManager.reload();

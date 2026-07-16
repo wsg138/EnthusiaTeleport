@@ -17,10 +17,12 @@ import org.bukkit.metadata.MetadataValue;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.api.CancelReason;
 import org.enthusia.teleport.api.TeleportApi;
 import org.enthusia.teleport.back.BackManager;
 import org.enthusia.teleport.combat.CombatTagManager;
 import org.enthusia.teleport.config.PluginConfig;
+import org.enthusia.teleport.request.TeleportRequestManager;
 import org.enthusia.teleport.util.Messages;
 
 import java.util.ArrayList;
@@ -41,14 +43,6 @@ public final class TeleportManager implements TeleportApi, Listener {
     private static final double INSTANT_WARMUP_THRESHOLD_SECONDS = 0.05D;
     private static final double TICKS_PER_SECOND = 20.0D;
     private static final long MILLIS_PER_SECOND = 1000L;
-
-    public enum CancelReason {
-        MOVE,
-        DAMAGE,
-        DISCONNECT,
-        RELOAD,
-        DISABLE
-    }
 
     public static class TeleportFlags {
         final boolean bypassCooldown;
@@ -98,6 +92,8 @@ public final class TeleportManager implements TeleportApi, Listener {
     private final Map<UUID, Long> cooldownUntil = new ConcurrentHashMap<>();
     private final Map<UUID, ActiveTeleport> activeTeleports = new ConcurrentHashMap<>();
 
+    private TeleportRequestManager requestManager;
+
     private SafeLocationFinder safeFinder;
     private double baseWarmupSeconds;
     private double movementCancelDistanceSquared;
@@ -126,6 +122,26 @@ public final class TeleportManager implements TeleportApi, Listener {
         warmupModifiers.clear();
         cooldownModifiers.clear();
         cooldownUntil.clear();
+    }
+
+    public void setRequestManager(TeleportRequestManager requestManager) {
+        this.requestManager = requestManager;
+    }
+
+    @Override
+    public int cancelAllRequestsInvolving(UUID playerId, CancelReason reason) {
+        if (playerId == null) {
+            return 0;
+        }
+        int cancelled = requestManager == null ? 0 : requestManager.cancelAllRequestsInvolving(playerId, reason);
+        for (Map.Entry<UUID, ActiveTeleport> entry : new ArrayList<>(activeTeleports.entrySet())) {
+            ActiveTeleport active = entry.getValue();
+            if (entry.getKey().equals(playerId) || active.anchor != null && playerId.equals(active.anchor.getUniqueId())) {
+                cancelTeleport(entry.getKey(), reason);
+                cancelled++;
+            }
+        }
+        return cancelled;
     }
 
     public void cancelAll(CancelReason reason) {
@@ -320,6 +336,10 @@ public final class TeleportManager implements TeleportApi, Listener {
         }
 
         switch (reason) {
+            case EXTERNAL_STATE_CHANGE, DUEL_SPECTATE -> {
+                messages.send(player, "teleport.cancelled-external-state");
+                notifyAnchor(active, "teleport.cancelled-external-state-other", player);
+            }
             case MOVE -> {
                 messages.send(player, "teleport.warmup-cancelled-move");
                 notifyAnchor(active, "teleport.warmup-cancelled-move-other", player);

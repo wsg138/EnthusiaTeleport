@@ -5,6 +5,14 @@ import java.util.UUID;
 public interface TeleportApi {
 
     /**
+     * Cancels all pending requests and warmups where this UUID is either the
+     * teleporter or the live destination anchor.
+     *
+     * @return number of cancelled requests and warmups
+     */
+    int cancelAllRequestsInvolving(UUID playerId, CancelReason reason);
+
+    /**
      * Base warmup in seconds from config, for informational use.
      */
     double getBaseWarmupSeconds();

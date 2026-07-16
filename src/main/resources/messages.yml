@@ -16,6 +16,8 @@ teleport.failed: "&cYour teleport was blocked by another plugin or server rule."
 teleport.safe-fallback-failed: "&cCould not find a safe location to teleport you."
 teleport.cancelled-reload: "&cYour pending teleport was cancelled because the plugin was reloaded. Please try again."
 teleport.cancelled-reload-other: "&e{player}'s pending teleport was cancelled because the plugin was reloaded."
+teleport.cancelled-external-state: "&eYour teleport was cancelled because a linked player entered duel watch mode."
+teleport.cancelled-external-state-other: "&eA linked teleport was cancelled because &6{player}&e entered duel watch mode."
 
 teleport.warmup-cancelled-move: "&cTeleport cancelled because you moved."
 teleport.warmup-cancelled-move-other: "&e{player}'s teleport to you was cancelled because they moved."
@@ -38,6 +40,7 @@ teleport.request.already-incoming: "&cYou already have a pending teleport reques
 teleport.request.ignored-sender: "&c{target} is ignoring your teleport requests."
 teleport.request.cancelled-reload: "&cYour pending teleport request was cancelled because the plugin was reloaded. Please try again."
 teleport.request.cancelled-disconnect: "&cYour pending teleport request involving &e{player}&c was cancelled because they disconnected."
+teleport.request.cancelled-external-state: "&eTeleport request cancelled because &6{player}&e entered duel watch mode."
 
 teleport.request.tpa-sent: "&aTeleport request sent to &e{target}&a. They have &e{seconds}s&a to accept."
 teleport.request.to-receiver: "&e{sender} &ahas requested to teleport to you."

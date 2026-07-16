@@ -7,6 +7,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.api.CancelReason;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -171,6 +172,30 @@ public class TeleportRequestManager implements Listener {
         }
     }
 
+    public int cancelAllRequestsInvolving(UUID playerId, CancelReason reason) {
+        if (playerId == null) {
+            return 0;
+        }
+        List<TeleportRequest> requests = new ArrayList<>();
+        Map<UUID, TeleportRequest> outgoingRequests = outgoing.get(playerId);
+        if (outgoingRequests != null) {
+            requests.addAll(outgoingRequests.values());
+        }
+        Map<UUID, TeleportRequest> incomingRequests = incoming.get(playerId);
+        if (incomingRequests != null) {
+            for (TeleportRequest request : incomingRequests.values()) {
+                if (!requests.contains(request)) {
+                    requests.add(request);
+                }
+            }
+        }
+        for (TeleportRequest request : requests) {
+            removeRequest(request);
+            notifyExternalStateCancellation(request, playerId, reason);
+        }
+        return requests.size();
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         removeByPlayer(event.getPlayer().getUniqueId(), true);
@@ -179,6 +204,19 @@ public class TeleportRequestManager implements Listener {
     private String resolveName(UUID playerId) {
         Player online = Bukkit.getPlayer(playerId);
         return online != null ? online.getName() : "That player";
+    }
+
+    private void notifyExternalStateCancellation(TeleportRequest request, UUID changedPlayerId, CancelReason reason) {
+        if (reason != CancelReason.EXTERNAL_STATE_CHANGE && reason != CancelReason.DUEL_SPECTATE) {
+            return;
+        }
+        String changedPlayerName = resolveName(changedPlayerId);
+        for (UUID recipientId : List.of(request.getSender(), request.getTarget())) {
+            Player recipient = Bukkit.getPlayer(recipientId);
+            if (recipient != null && recipient.isOnline()) {
+                plugin.getMessages().send(recipient, "teleport.request.cancelled-external-state", Map.of("player", changedPlayerName));
+            }
+        }
     }
 
     private TeleportRequest removeRequest(UUID senderId, UUID targetId, boolean cancelTask) {
