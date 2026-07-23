@@ -1,9 +1,9 @@
 name: EnthusiaTeleport
 main: org.enthusia.teleport.EnthusiaTeleportPlugin
-version: 1.2.6
+version: 1.2.7
 api-version: "1.21"
 author: P2wn
-description: Teleport, home, spawn, and staff utility plugin for Enthusia. (Chat functionality removed in favor of RoseChat.)
+description: Teleport, home, spawn, and staff utility plugin for Enthusia. Messaging is provided by RoseChat.
 softdepend: [CombatLogX]
 
 commands:

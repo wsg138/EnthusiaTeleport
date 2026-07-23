@@ -129,11 +129,6 @@ logging:
   flush-interval-seconds: 5
   max-queue-size: 5000
 
-msglog:
-  max-days-scanned: 7
-  max-results: 500
-  timeout-seconds: 10
-
 last-location-backstop:
   interval-minutes: 5
   max-players-per-tick: 10

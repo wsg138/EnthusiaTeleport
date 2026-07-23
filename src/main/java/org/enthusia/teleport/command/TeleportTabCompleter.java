@@ -169,8 +169,6 @@ public class TeleportTabCompleter implements TabCompleter {
                 .collect(Collectors.toList());
     }
 
-    }
-
     private List<String> tabOfflinePlayers(String[] args) {
         if (args.length != FIRST_ARGUMENT) return Collections.emptyList();
 
