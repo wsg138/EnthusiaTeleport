@@ -13,7 +13,6 @@ public record PluginConfig(
         RtpSettings rtp,
         PersistenceSettings persistence,
         LoggingSettings logging,
-        MsgLogSettings msgLog,
         LastLocationBackstopSettings lastLocationBackstop,
         TabCacheSettings tabCache,
         DebugSettings debug
@@ -113,13 +112,6 @@ public record PluginConfig(
     public record LoggingSettings(
             int flushIntervalSeconds,
             int maxQueueSize
-    ) {
-    }
-
-    public record MsgLogSettings(
-            int maxDaysScanned,
-            int maxResults,
-            int timeoutSeconds
     ) {
     }
 
