@@ -12,7 +12,8 @@ import java.lang.reflect.Method;
  * Queries protection state and removes protection via NPP's internal ProtectionManager.
  * No compile-time dependency — safe when NPP is absent.
  */
-public class NPPBridge {
+@SuppressWarnings({"PMD.NullAssignment", "PMD.AvoidAccessibilityAlteration"})
+public final class NPPBridge {
 
     private Object protectionManager;
     private Method isProtectedMethod;

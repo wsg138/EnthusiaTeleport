@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@SuppressWarnings({"PMD.UseConcurrentHashMap", "PMD.NullAssignment"})
 public class CombatTagManager implements Listener {
 
     private final EnthusiaTeleportPlugin plugin;
@@ -131,20 +132,28 @@ public class CombatTagManager implements Listener {
     }
 
     /**
+     * Validate that a PlayerInteractEvent is a valid end-crystal placement
+     * on obsidian or bedrock. Extracted to keep onCrystalPlace CCN low.
+     */
+    private static boolean isValidCrystalPlace(PlayerInteractEvent event) {
+        if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return false;
+        if (event.getItem() == null || event.getItem().getType() != Material.END_CRYSTAL) return false;
+        Block clicked = event.getClickedBlock();
+        if (clicked == null) return false;
+        Material type = clicked.getType();
+        return type == Material.OBSIDIAN || type == Material.BEDROCK;
+    }
+
+    /**
      * When a player places an end crystal on obsidian/bedrock.
      * The crystal entity spawns after the interact event — schedule a one-tick search.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onCrystalPlace(PlayerInteractEvent event) {
-        if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getItem() == null || event.getItem().getType() != Material.END_CRYSTAL) return;
-
-        Block clicked = event.getClickedBlock();
-        if (clicked == null) return;
-        Material type = clicked.getType();
-        if (type != Material.OBSIDIAN && type != Material.BEDROCK) return;
+        if (!isValidCrystalPlace(event)) return;
 
         Player player = event.getPlayer();
+        Block clicked = event.getClickedBlock();
         Location loc = clicked.getLocation().add(0.5, 1, 0.5);
 
         Bukkit.getScheduler().runTask(plugin, () -> {
@@ -209,32 +218,30 @@ public class CombatTagManager implements Listener {
     public void onEntityExplode(EntityExplodeEvent event) {
         for (Block block : event.blockList()) {
             if (block.getType() == Material.RESPAWN_ANCHOR) {
-                UUID owner = anchorOwners.get(blockKey(block));
-                if (owner != null) {
-                    lastExplosionWorld = block.getWorld().getName();
-                    lastExplosionOwner = owner;
-                    lastExplosionTime = System.currentTimeMillis();
-                }
+                cacheExplosionOwner(block);
                 anchorOwners.remove(blockKey(block));
             }
         }
     }
 
     /**
-     * Block explosions (respawn anchors, beds): same attribution as EntityExplodeEvent
-     * but for the Paper-specific BlockExplodeEvent which fires for block-caused explosions.
+     * Block explosions (respawn anchors, beds): same attribution as EntityExplodeEvent.
      */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
     public void onBlockExplode(BlockExplodeEvent event) {
         Block block = event.getBlock();
         if (block.getType() == Material.RESPAWN_ANCHOR) {
-            UUID owner = anchorOwners.get(blockKey(block));
-            if (owner != null) {
-                lastExplosionWorld = block.getWorld().getName();
-                lastExplosionOwner = owner;
-                lastExplosionTime = System.currentTimeMillis();
-            }
+            cacheExplosionOwner(block);
             anchorOwners.remove(blockKey(block));
+        }
+    }
+
+    private void cacheExplosionOwner(Block block) {
+        UUID owner = anchorOwners.get(blockKey(block));
+        if (owner != null) {
+            lastExplosionWorld = block.getWorld().getName();
+            lastExplosionOwner = owner;
+            lastExplosionTime = System.currentTimeMillis();
         }
     }
 
@@ -265,34 +272,35 @@ public class CombatTagManager implements Listener {
     /**
      * Entity vs entity damage: combat tagging and NPP attacker strip.
      * Runs at MONITOR with no ignoreCancelled so it still fires after
-     * the HIGHEST NPP handler cancels the event — attacker tagging must
-     * happen regardless.
+     * the HIGHEST NPP handler cancels the event.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
 
         Player attacker = getPlayerDamager(event.getDamager());
-        boolean cancelled = event.isCancelled();
 
-        if (cancelled) {
-            // Event was cancelled (possibly by NPP protection) — still tag attacker
-            if (attacker != null && !attacker.equals(victim)) {
-                if (!combatLogXHook.isHooked()) {
-                    tag(attacker);
-                }
-            }
+        if (event.isCancelled()) {
+            tagAttackerIfValid(attacker, victim);
             return;
         }
 
         if (event.getFinalDamage() <= 0) return;
         if (attacker == null) return;
 
-        // NPP: attacker is protected → strip their protection
+        processAttack(victim, attacker);
+    }
+
+    private void tagAttackerIfValid(Player attacker, Player victim) {
+        if (attacker != null && !attacker.equals(victim) && !combatLogXHook.isHooked()) {
+            tag(attacker);
+        }
+    }
+
+    private void processAttack(Player victim, Player attacker) {
         if (nppBridge.isProtected(attacker)) {
             nppBridge.removeProtection(attacker);
         }
-
         if (!combatLogXHook.isHooked()) {
             tag(victim);
             tag(attacker);
@@ -305,36 +313,43 @@ public class CombatTagManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player victim)) return;
-
         if (event.isCancelled()) return;
 
         EntityDamageEvent.DamageCause cause = event.getCause();
-        boolean isExplosion = cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION
+        if (!isExplosion(cause) || !enabled) return;
+
+        attributeExplosion(victim);
+    }
+
+    private static boolean isExplosion(EntityDamageEvent.DamageCause cause) {
+        return cause == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION
                 || cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION;
+    }
 
-        if (!isExplosion || !enabled) return;
-
-        // Check for recent anchor explosion attribution
-        if (lastExplosionOwner != null
+    private boolean isRecentExplosion(Player victim) {
+        return lastExplosionOwner != null
                 && System.currentTimeMillis() - lastExplosionTime < 2000
                 && lastExplosionWorld != null
-                && lastExplosionWorld.equals(victim.getWorld().getName())) {
+                && lastExplosionWorld.equals(victim.getWorld().getName());
+    }
 
-            Player anchorOwner = Bukkit.getPlayer(lastExplosionOwner);
-            if (anchorOwner != null && !anchorOwner.equals(victim)) {
-                if (!combatLogXHook.isHooked()) {
-                    tag(victim);
-                    tag(anchorOwner);
-                }
+    private void attributeExplosion(Player victim) {
+        if (!isRecentExplosion(victim)) return;
 
-                if (nppBridge.isProtected(anchorOwner)) {
-                    nppBridge.removeProtection(anchorOwner);
-                }
+        Player anchorOwner = Bukkit.getPlayer(lastExplosionOwner);
+        if (anchorOwner == null || anchorOwner.equals(victim)) return;
 
-                lastExplosionOwner = null;
-                lastExplosionWorld = null;
-            }
+        if (!combatLogXHook.isHooked()) {
+            tag(victim);
+            tag(anchorOwner);
         }
+
+        if (nppBridge.isProtected(anchorOwner)) {
+            nppBridge.removeProtection(anchorOwner);
+        }
+
+        lastExplosionOwner = null;
+        lastExplosionWorld = null;
     }
 
     // ─── Cleanup ─────────────────────────────────────────────────────────────
