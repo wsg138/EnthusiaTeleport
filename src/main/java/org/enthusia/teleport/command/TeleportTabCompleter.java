@@ -47,7 +47,7 @@ public class TeleportTabCompleter implements TabCompleter {
         return switch (command.getName().toLowerCase(Locale.ROOT)) {
             case "tpa", "tpask", "tpahere", "invsee", "inventorysee", "endersee", "enderview" ->
                     tabPlayers(args, 0);
-            case "tpaccept", "tpadeny" -> tabIncomingRequests(sender, args, 0);
+            case "tpaccept", "tpyes", "tpadeny", "tpno" -> tabIncomingRequests(sender, args, 0);
             case "tpignore" -> tabTpIgnore(sender, args);
             case "home" -> tabHome(sender, args);
             case "homes" -> tabHomes(sender, args);

@@ -4,12 +4,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
  * Reflection-based bridge to NewPlayerProtection plugin.
- * Queries protection state and removes protection via NPP's internal ProtectionManager.
+ * Queries protection state and removes protection via NPP's public ProtectionManager API.
  * No compile-time dependency — safe when NPP is absent.
  */
 public class NPPBridge {
@@ -35,9 +34,8 @@ public class NPPBridge {
         }
 
         try {
-            Field pmField = npp.getClass().getDeclaredField("protectionManager");
-            pmField.setAccessible(true);
-            this.protectionManager = pmField.get(npp);
+            Method getProtectionManager = npp.getClass().getMethod("getProtectionManager");
+            this.protectionManager = getProtectionManager.invoke(npp);
 
             if (this.protectionManager == null) return;
 
@@ -57,6 +55,10 @@ public class NPPBridge {
 
     public boolean isAvailable() {
         return available;
+    }
+
+    public boolean hasBypass(Player player) {
+        return player != null && player.hasPermission("newplayerprotection.bypass");
     }
 
     public boolean isProtected(Player player) {

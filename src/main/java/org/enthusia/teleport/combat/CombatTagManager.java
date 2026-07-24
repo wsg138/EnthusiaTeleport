@@ -9,12 +9,7 @@ import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockExplodeEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -22,8 +17,11 @@ import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,16 +31,11 @@ public class CombatTagManager implements Listener {
     private final CombatLogXHook combatLogXHook;
     private final NPPBridge nppBridge;
     private final Map<UUID, Long> combatUntil = new ConcurrentHashMap<>();
+    private final Set<EntityDamageByEntityEvent> nppCancelledDamage =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     // Crystal entity UUID → player UUID who last punched/owns it
     private final Map<UUID, UUID> crystalOwners = new HashMap<>();
-    // Block location key ("world:x:y:z") → player UUID who placed/charged the anchor
-    private final Map<String, UUID> anchorOwners = new HashMap<>();
-    // Recent explosion attribution: used to attribute BLOCK_EXPLOSION damage to anchor owner
-    private String lastExplosionWorld;
-    private UUID lastExplosionOwner;
-    private long lastExplosionTime;
-
     private boolean enabled;
     private long tagMillis;
 
@@ -172,73 +165,6 @@ public class CombatTagManager implements Listener {
                 () -> crystalOwners.remove(crystalId), 20L); // 1 second
     }
 
-    // ─── Respawn anchor ownership tracking ───────────────────────────────────
-
-    private static String blockKey(Block block) {
-        return block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onAnchorPlace(BlockPlaceEvent event) {
-        if (event.getBlock().getType() != Material.RESPAWN_ANCHOR) return;
-        anchorOwners.put(blockKey(event.getBlock()), event.getPlayer().getUniqueId());
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onAnchorCharge(PlayerInteractEvent event) {
-        if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
-        Block block = event.getClickedBlock();
-        if (block == null || block.getType() != Material.RESPAWN_ANCHOR) return;
-        if (event.getItem() == null || event.getItem().getType() != Material.GLOWSTONE_DUST) return;
-        anchorOwners.put(blockKey(block), event.getPlayer().getUniqueId());
-    }
-
-    /**
-     * Clean up anchor ownership when the block is mined (not exploded).
-     */
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onAnchorBreak(BlockBreakEvent event) {
-        if (event.getBlock().getType() != Material.RESPAWN_ANCHOR) return;
-        anchorOwners.remove(blockKey(event.getBlock()));
-    }
-
-    /**
-     * Entity explosions (crystals, creepers, etc.): scan destroyed blocks for
-     * tracked respawn anchors and cache the owner for damage attribution.
-     */
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onEntityExplode(EntityExplodeEvent event) {
-        for (Block block : event.blockList()) {
-            if (block.getType() == Material.RESPAWN_ANCHOR) {
-                UUID owner = anchorOwners.get(blockKey(block));
-                if (owner != null) {
-                    lastExplosionWorld = block.getWorld().getName();
-                    lastExplosionOwner = owner;
-                    lastExplosionTime = System.currentTimeMillis();
-                }
-                anchorOwners.remove(blockKey(block));
-            }
-        }
-    }
-
-    /**
-     * Block explosions (respawn anchors, beds): same attribution as EntityExplodeEvent
-     * but for the Paper-specific BlockExplodeEvent which fires for block-caused explosions.
-     */
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
-    public void onBlockExplode(BlockExplodeEvent event) {
-        Block block = event.getBlock();
-        if (block.getType() == Material.RESPAWN_ANCHOR) {
-            UUID owner = anchorOwners.get(blockKey(block));
-            if (owner != null) {
-                lastExplosionWorld = block.getWorld().getName();
-                lastExplosionOwner = owner;
-                lastExplosionTime = System.currentTimeMillis();
-            }
-            anchorOwners.remove(blockKey(block));
-        }
-    }
-
     // ─── NPP protection cancellation (HIGHEST priority) ──────────────────────
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
@@ -248,23 +174,14 @@ public class CombatTagManager implements Listener {
         if (attacker == null || event.getFinalDamage() <= 0) return;
 
         removeProtectionForAttack(attacker, victim);
-        if (nppBridge.isProtected(victim)) event.setCancelled(true);
-    }
-
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
-    public void onNppCancelDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player victim)) return;
-        if (event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) return;
-
-        Player attacker = getRecentAnchorOwner(victim);
-        if (attacker == null) return;
-
-        removeProtectionForAttack(attacker, victim);
-        if (nppBridge.isProtected(victim)) event.setCancelled(true);
+        if (nppBridge.isProtected(victim) && !nppBridge.hasBypass(victim)) {
+            event.setCancelled(true);
+            nppCancelledDamage.add(event);
+        }
     }
 
     private void removeProtectionForAttack(Player attacker, Player victim) {
-        if (!attacker.equals(victim) && nppBridge.isProtected(attacker)) {
+        if (!attacker.equals(victim) && !nppBridge.hasBypass(attacker) && nppBridge.isProtected(attacker)) {
             nppBridge.removeProtection(attacker);
         }
     }
@@ -282,10 +199,9 @@ public class CombatTagManager implements Listener {
         if (!(event.getEntity() instanceof Player victim)) return;
 
         Player attacker = getPlayerDamager(event.getDamager());
-        boolean cancelled = event.isCancelled();
-
-        if (cancelled) {
-            // Event was cancelled (possibly by NPP protection) — still tag attacker
+        if (event.isCancelled()) {
+            if (!nppCancelledDamage.remove(event)) return;
+            // Only bridge-cancelled damage tags the attacker.
             if (attacker != null && !attacker.equals(victim)) {
                 if (!combatLogXHook.isHooked()) {
                     tag(attacker);
@@ -302,41 +218,6 @@ public class CombatTagManager implements Listener {
             tag(victim);
             tag(attacker);
         }
-    }
-
-    /**
-     * Environmental damage: explosion attribution and combat tagging.
-     */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onEntityDamage(EntityDamageEvent event) {
-        if (!(event.getEntity() instanceof Player victim)) return;
-
-        if (event.isCancelled()) return;
-
-        if (event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION || !enabled) return;
-
-        Player anchorOwner = getRecentAnchorOwner(victim);
-        if (anchorOwner == null) return;
-
-        if (!combatLogXHook.isHooked()) {
-            tag(victim);
-            tag(anchorOwner);
-        }
-
-        lastExplosionOwner = null;
-        lastExplosionWorld = null;
-    }
-
-    private Player getRecentAnchorOwner(Player victim) {
-        if (lastExplosionOwner == null
-                || System.currentTimeMillis() - lastExplosionTime >= 2000
-                || lastExplosionWorld == null
-                || !lastExplosionWorld.equals(victim.getWorld().getName())) {
-            return null;
-        }
-
-        Player owner = Bukkit.getPlayer(lastExplosionOwner);
-        return owner != null && !owner.equals(victim) ? owner : null;
     }
 
     // ─── Cleanup ─────────────────────────────────────────────────────────────
@@ -361,6 +242,5 @@ public class CombatTagManager implements Listener {
         combatUntil.remove(player.getUniqueId());
 
         crystalOwners.values().removeIf(uuid -> uuid.equals(player.getUniqueId()));
-        anchorOwners.values().removeIf(uuid -> uuid.equals(player.getUniqueId()));
     }
 }
