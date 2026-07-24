@@ -172,9 +172,10 @@ public class CombatTagManager implements Listener {
         if (!(event.getEntity() instanceof Player victim)) return;
         Player attacker = getPlayerDamager(event.getDamager());
         if (attacker == null || event.getFinalDamage() <= 0) return;
+        if (nppBridge.hasBypass(attacker)) return;
 
         removeProtectionForAttack(attacker, victim);
-        if (nppBridge.isProtected(victim) && !nppBridge.hasBypass(victim)) {
+        if (nppBridge.isProtected(victim)) {
             event.setCancelled(true);
             nppCancelledDamage.add(event);
         }
@@ -199,8 +200,9 @@ public class CombatTagManager implements Listener {
         if (!(event.getEntity() instanceof Player victim)) return;
 
         Player attacker = getPlayerDamager(event.getDamager());
+        boolean cancelledByNppBridge = nppCancelledDamage.remove(event);
         if (event.isCancelled()) {
-            if (!nppCancelledDamage.remove(event)) return;
+            if (!cancelledByNppBridge) return;
             // Only bridge-cancelled damage tags the attacker.
             if (attacker != null && !attacker.equals(victim)) {
                 if (!combatLogXHook.isHooked()) {
