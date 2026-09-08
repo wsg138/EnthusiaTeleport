@@ -28,6 +28,7 @@ import org.enthusia.teleport.command.TpoCommand;
 import org.enthusia.teleport.command.TpposCommand;
 import org.enthusia.teleport.config.PluginConfigManager;
 import org.enthusia.teleport.debug.PerformanceMonitor;
+import org.enthusia.teleport.home.BedHomeManager;
 import org.enthusia.teleport.home.HomeGuiManager;
 import org.enthusia.teleport.home.HomeManager;
 import org.enthusia.teleport.ignore.IgnoreManager;
@@ -52,6 +53,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     private AdminLogManager adminLogManager;
     private IgnoreManager ignoreManager;
     private HomeManager homeManager;
+    private BedHomeManager bedHomeManager;
     private BackManager backManager;
     private TeleportManager teleportManager;
     private TeleportRequestManager requestManager;
@@ -84,6 +86,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         this.adminLogManager = new AdminLogManager(this);
         this.ignoreManager = new IgnoreManager(this);
         this.homeManager = new HomeManager(this);
+        this.bedHomeManager = new BedHomeManager(this);
         this.backManager = new BackManager(this);
         this.teleportManager = new TeleportManager(this);
         this.requestManager = new TeleportRequestManager(this);
@@ -133,6 +136,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         messages.reload();
         ignoreManager.reload();
         homeManager.reload();
+        bedHomeManager.reload();
         rtpManager.reload();
         combatManager.reload();
         backManager.reload();
@@ -143,6 +147,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
 
     public void saveAllData() {
         homeManager.saveAll();
+        bedHomeManager.saveAll();
         ignoreManager.saveAll();
         rtpManager.saveAll();
         lastLocationManager.saveOnlinePlayers();
@@ -151,6 +156,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     public void saveAllDataBlocking() {
         if (homeManager != null) {
             homeManager.flushBlocking();
+        }
+        if (bedHomeManager != null) {
+            bedHomeManager.flushBlocking();
         }
         if (ignoreManager != null) {
             ignoreManager.flushBlocking();
@@ -248,6 +256,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(backManager, this);
         Bukkit.getPluginManager().registerEvents(combatManager, this);
         Bukkit.getPluginManager().registerEvents(homeGuiManager, this);
+        Bukkit.getPluginManager().registerEvents(bedHomeManager, this);
         Bukkit.getPluginManager().registerEvents(inventoryViewCommand, this);
         Bukkit.getPluginManager().registerEvents(spawnManager, this);
         Bukkit.getPluginManager().registerEvents(lastLocationManager, this);
@@ -272,6 +281,10 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
 
     public HomeManager getHomeManager() {
         return homeManager;
+    }
+
+    public BedHomeManager getBedHomeManager() {
+        return bedHomeManager;
     }
 
     public IgnoreManager getIgnoreManager() {
