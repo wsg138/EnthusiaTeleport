@@ -7,6 +7,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Bed;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,10 +19,16 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -35,29 +42,39 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
- * Owns persistent, named bed homes independently of Minecraft's current respawn point.
- *
- * <p>This separation is intentional: using a respawn anchor is allowed to update the
- * vanilla respawn point without replacing the player's saved bed destinations.</p>
+ * Owns persistent, named bed homes independently of Minecraft's vanilla respawn point.
+ * Respawn-anchor changes are deliberately ignored; only successful BED spawn changes
+ * create or refresh a bed home.
  */
 public final class BedHomeManager implements Listener {
 
+    private static final DateTimeFormatter BACKUP_TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss");
     private static final Set<String> RESERVED_NAMES = Set.of("list", "delete", "del", "remove", "rename", "help");
+    private static final Pattern VALID_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
+    private static final int BED_SEARCH_HORIZONTAL_RADIUS = 3;
+    private static final int BED_SEARCH_VERTICAL_RADIUS = 2;
+    private static final double RECENT_BED_MAX_DISTANCE_SQUARED = 64.0D;
 
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
+    private final File tempFile;
+    private final Object ioLock = new Object();
     private final Map<UUID, Map<String, BedHome>> beds = new ConcurrentHashMap<>();
     private final Map<UUID, List<BedBreakNotice>> pendingBreakNotices = new ConcurrentHashMap<>();
-    private final Set<UUID> migratedOwners = ConcurrentHashMap.newKeySet();
     private final Map<UUID, BedBlockKey> recentBedInteractions = new HashMap<>();
-    private boolean dirty;
-    private boolean saveInProgress;
+
+    private long mutationVersion;
+    private long persistedVersion;
+    private volatile long newestRequestedWriteVersion;
+    private volatile boolean saveInProgress;
 
     public BedHomeManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "beds.yml");
+        this.tempFile = new File(plugin.getDataFolder(), "beds.yml.tmp");
         load();
     }
 
@@ -81,7 +98,8 @@ public final class BedHomeManager implements Listener {
 
     public BedHome getMostRecentBed(UUID owner) {
         return getMap(owner).values().stream()
-                .max(Comparator.comparingLong(BedHome::getLastUsedAt))
+                .max(Comparator.comparingLong(BedHome::getLastUsedAt)
+                        .thenComparingLong(BedHome::getCreatedAt))
                 .orElse(null);
     }
 
@@ -91,7 +109,7 @@ public final class BedHomeManager implements Listener {
         }
         BedHome removed = getMap(owner).remove(normalizeName(name));
         if (removed != null) {
-            dirty = true;
+            markDirty();
         }
         return removed;
     }
@@ -115,15 +133,23 @@ public final class BedHomeManager implements Listener {
         BedHome renamed = copyWithName(existing, newKey, newName.trim());
         ownerBeds.remove(oldKey);
         ownerBeds.put(newKey, renamed);
-        dirty = true;
+        markDirty();
         return RenameResult.SUCCESS;
     }
 
     public boolean isValidName(String name) {
-        String normalized = normalizeName(name);
-        return !normalized.isEmpty() && !normalized.contains(".") && !RESERVED_NAMES.contains(normalized);
+        if (name == null) {
+            return false;
+        }
+        String trimmed = name.trim();
+        String normalized = normalizeName(trimmed);
+        return VALID_NAME.matcher(trimmed).matches() && !RESERVED_NAMES.contains(normalized);
     }
 
+    /**
+     * Returns false only when the bed's world is loaded and the saved bed block is no longer there.
+     * An unavailable/unloaded world is preserved so a temporary world-load problem cannot delete data.
+     */
     public boolean isBedPresent(BedHome home) {
         World world = Bukkit.getWorld(home.getWorldName());
         if (world == null) {
@@ -133,13 +159,26 @@ public final class BedHomeManager implements Listener {
         return key != null && home.isAt(key.worldName(), key.x(), key.y(), key.z());
     }
 
+    /**
+     * Resolves a bed teleport from live state. This is safe to call again when a teleport warmup completes.
+     */
+    public Location resolveTeleportLocation(UUID owner, String bedKey) {
+        BedHome current = getBed(owner, bedKey);
+        if (current == null || !isBedPresent(current)) {
+            return null;
+        }
+        return current.toLocation();
+    }
+
     public void saveAll() {
-        dirty = true;
+        if (mutationVersion <= persistedVersion) {
+            markDirty();
+        }
         plugin.getPerformanceMonitor().increment("yaml.beds.queued");
     }
 
     public void flushIfDirtyAsync() {
-        if (!dirty) {
+        if (mutationVersion <= persistedVersion) {
             plugin.getPerformanceMonitor().increment("yaml.beds.skipped");
             return;
         }
@@ -149,30 +188,55 @@ public final class BedHomeManager implements Listener {
         }
 
         PersistenceSnapshot snapshot = snapshot();
-        dirty = false;
+        newestRequestedWriteVersion = Math.max(newestRequestedWriteVersion, snapshot.version());
         saveInProgress = true;
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            boolean success = writeSnapshot(snapshot);
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            WriteResult result = writeSnapshot(snapshot);
+            try {
+                Bukkit.getScheduler().runTask(plugin, () -> finishAsyncWrite(snapshot, result));
+            } catch (RuntimeException ignored) {
+                // Plugin shutdown may reject the callback. flushBlocking() fences stale writes on disable.
                 saveInProgress = false;
-                plugin.getPerformanceMonitor().increment(success ? "yaml.beds.flushed" : "yaml.beds.failed");
-                if (dirty) {
-                    flushIfDirtyAsync();
-                }
-            });
+            }
         });
     }
 
     public void flushBlocking() {
-        if (!dirty && !saveInProgress) {
+        if (mutationVersion <= persistedVersion && !saveInProgress) {
             plugin.getPerformanceMonitor().increment("yaml.beds.skipped");
             return;
         }
+
         PersistenceSnapshot snapshot = snapshot();
-        dirty = false;
-        writeSnapshot(snapshot);
+        newestRequestedWriteVersion = Math.max(newestRequestedWriteVersion, snapshot.version());
+        WriteResult result = writeSnapshot(snapshot);
         saveInProgress = false;
-        plugin.getPerformanceMonitor().increment("yaml.beds.flushed");
+
+        if (result == WriteResult.WRITTEN) {
+            persistedVersion = Math.max(persistedVersion, snapshot.version());
+            plugin.getPerformanceMonitor().increment("yaml.beds.flushed");
+        } else if (result == WriteResult.SKIPPED_STALE) {
+            plugin.getPerformanceMonitor().increment("yaml.beds.coalesced");
+        } else {
+            plugin.getPerformanceMonitor().increment("yaml.beds.failed");
+        }
+    }
+
+    private void finishAsyncWrite(PersistenceSnapshot snapshot, WriteResult result) {
+        saveInProgress = false;
+        if (result == WriteResult.WRITTEN) {
+            persistedVersion = Math.max(persistedVersion, snapshot.version());
+            plugin.getPerformanceMonitor().increment("yaml.beds.flushed");
+        } else if (result == WriteResult.SKIPPED_STALE) {
+            plugin.getPerformanceMonitor().increment("yaml.beds.coalesced");
+        } else {
+            plugin.getPerformanceMonitor().increment("yaml.beds.failed");
+            return;
+        }
+
+        if (mutationVersion > persistedVersion) {
+            flushIfDirtyAsync();
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -184,7 +248,7 @@ public final class BedHomeManager implements Listener {
 
         UUID playerId = event.getPlayer().getUniqueId();
         recentBedInteractions.put(playerId, key);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> recentBedInteractions.remove(playerId, key), 5L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> recentBedInteractions.remove(playerId, key), 10L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -194,18 +258,18 @@ public final class BedHomeManager implements Listener {
         }
 
         UUID playerId = event.getPlayer().getUniqueId();
-        BedBlockKey bedKey = recentBedInteractions.remove(playerId);
+        BedBlockKey recent = recentBedInteractions.remove(playerId);
+        BedBlockKey bedKey = recent != null && isNear(recent, event.getLocation())
+                ? recent
+                : findUniqueBedNear(event.getLocation());
+
         if (bedKey == null) {
-            bedKey = findBedNear(event.getLocation());
-        }
-        if (bedKey == null) {
-            plugin.getLogger().warning("Could not identify bed block while saving a bed home for " + event.getPlayer().getName());
+            plugin.getLogger().warning("Could not unambiguously identify the bed while saving a bed home for "
+                    + event.getPlayer().getName() + ". No bed home was changed.");
             return;
         }
 
         upsertBed(event.getPlayer(), bedKey, event.getLocation(), true);
-        migratedOwners.add(playerId);
-        dirty = true;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -231,25 +295,12 @@ public final class BedHomeManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        migrateLegacyBed(player);
-
         Bukkit.getScheduler().runTask(plugin, () -> deliverPendingBreakNotices(player));
     }
 
-    private void migrateLegacyBed(Player player) {
-        UUID owner = player.getUniqueId();
-        if (!migratedOwners.add(owner)) {
-            return;
-        }
-
-        Location legacySpawn = player.getBedSpawnLocation();
-        if (legacySpawn != null) {
-            BedBlockKey bedKey = findBedNear(legacySpawn);
-            if (bedKey != null && findBedAt(owner, bedKey) == null) {
-                upsertBed(player, bedKey, legacySpawn, false);
-            }
-        }
-        dirty = true;
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        recentBedInteractions.remove(event.getPlayer().getUniqueId());
     }
 
     private void upsertBed(Player player, BedBlockKey bedKey, Location teleportLocation, boolean announceNew) {
@@ -269,7 +320,7 @@ public final class BedHomeManager implements Listener {
                     existing.getCreatedAt(), now
             );
             ownerBeds.put(existing.getKey(), refreshed);
-            dirty = true;
+            markDirty();
             return;
         }
 
@@ -283,7 +334,7 @@ public final class BedHomeManager implements Listener {
                 now, now
         );
         ownerBeds.put(key, bedHome);
-        dirty = true;
+        markDirty();
 
         if (announceNew) {
             player.sendMessage(plugin.getMessages().color(
@@ -341,8 +392,7 @@ public final class BedHomeManager implements Listener {
         for (Map.Entry<UUID, Map<String, BedHome>> ownerEntry : beds.entrySet()) {
             Iterator<Map.Entry<String, BedHome>> iterator = ownerEntry.getValue().entrySet().iterator();
             while (iterator.hasNext()) {
-                Map.Entry<String, BedHome> bedEntry = iterator.next();
-                BedHome home = bedEntry.getValue();
+                BedHome home = iterator.next().getValue();
                 if (home.isAt(key.worldName(), key.x(), key.y(), key.z())) {
                     iterator.remove();
                     brokenBeds.add(new BrokenBed(ownerEntry.getKey(), home.getName()));
@@ -365,7 +415,10 @@ public final class BedHomeManager implements Listener {
                         .add(new BedBreakNotice(brokenBed.name(), brokenAt));
             }
         }
-        dirty = true;
+
+        markDirty();
+        // Destruction notifications are important enough to enqueue persistence immediately.
+        flushIfDirtyAsync();
     }
 
     private void deliverPendingBreakNotices(Player player) {
@@ -382,7 +435,8 @@ public final class BedHomeManager implements Listener {
         for (BedBreakNotice notice : notices) {
             sendBrokenMessage(player, notice.name(), formatElapsed(now - notice.brokenAt()));
         }
-        dirty = true;
+        markDirty();
+        flushIfDirtyAsync();
     }
 
     private void sendBrokenMessage(Player player, String name, String elapsed) {
@@ -425,34 +479,39 @@ public final class BedHomeManager implements Listener {
         return value + " " + unit + (value == 1L ? "" : "s");
     }
 
-    private BedBlockKey findBedNear(Location location) {
+    private boolean isNear(BedBlockKey bed, Location location) {
+        World world = location.getWorld();
+        if (world == null || !bed.worldName().equals(world.getName())) {
+            return false;
+        }
+        double dx = bed.x() + 0.5D - location.getX();
+        double dy = bed.y() + 0.5D - location.getY();
+        double dz = bed.z() + 0.5D - location.getZ();
+        return dx * dx + dy * dy + dz * dz <= RECENT_BED_MAX_DISTANCE_SQUARED;
+    }
+
+    private BedBlockKey findUniqueBedNear(Location location) {
         World world = location.getWorld();
         if (world == null) {
             return null;
         }
 
-        BedBlockKey best = null;
-        double bestDistance = Double.MAX_VALUE;
+        Set<BedBlockKey> candidates = new HashSet<>();
         int centerX = location.getBlockX();
         int centerY = location.getBlockY();
         int centerZ = location.getBlockZ();
-        for (int y = centerY - 1; y <= centerY + 1; y++) {
-            for (int x = centerX - 2; x <= centerX + 2; x++) {
-                for (int z = centerZ - 2; z <= centerZ + 2; z++) {
-                    Block block = world.getBlockAt(x, y, z);
-                    BedBlockKey candidate = canonicalBed(block);
-                    if (candidate == null) {
-                        continue;
-                    }
-                    double distance = block.getLocation().add(0.5D, 0.5D, 0.5D).distanceSquared(location);
-                    if (distance < bestDistance) {
-                        best = candidate;
-                        bestDistance = distance;
+        for (int y = centerY - BED_SEARCH_VERTICAL_RADIUS; y <= centerY + BED_SEARCH_VERTICAL_RADIUS; y++) {
+            for (int x = centerX - BED_SEARCH_HORIZONTAL_RADIUS; x <= centerX + BED_SEARCH_HORIZONTAL_RADIUS; x++) {
+                for (int z = centerZ - BED_SEARCH_HORIZONTAL_RADIUS; z <= centerZ + BED_SEARCH_HORIZONTAL_RADIUS; z++) {
+                    BedBlockKey candidate = canonicalBed(world.getBlockAt(x, y, z));
+                    if (candidate != null) {
+                        candidates.add(candidate);
                     }
                 }
             }
         }
-        return best;
+
+        return candidates.size() == 1 ? candidates.iterator().next() : null;
     }
 
     private BedBlockKey canonicalBed(Block block) {
@@ -474,23 +533,36 @@ public final class BedHomeManager implements Listener {
         return name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
     }
 
+    private void markDirty() {
+        mutationVersion++;
+    }
+
     private void load() {
         beds.clear();
         pendingBreakNotices.clear();
-        migratedOwners.clear();
-        ensureFileExists();
+        recentBedInteractions.clear();
+        saveInProgress = false;
+        mutationVersion = 0L;
+        persistedVersion = 0L;
+        newestRequestedWriteVersion = 0L;
 
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        ensureFileExists();
+        if (!file.exists() || file.length() == 0L) {
+            return;
+        }
+
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.load(file);
+        } catch (IOException | InvalidConfigurationException exception) {
+            File backup = backupUnreadableFile();
+            plugin.getLogger().severe("Could not load beds.yml. Bed homes were left empty for this startup and the unreadable "
+                    + "file was moved to " + backup.getName() + ". Cause: " + exception.getMessage());
+            return;
+        }
+
         loadBeds(config.getConfigurationSection("beds"));
         loadNotices(config.getConfigurationSection("notifications"));
-        for (String rawOwner : config.getStringList("migrated")) {
-            UUID owner = parseUuid(rawOwner);
-            if (owner != null) {
-                migratedOwners.add(owner);
-            }
-        }
-        dirty = false;
-        saveInProgress = false;
     }
 
     private void loadBeds(ConfigurationSection root) {
@@ -524,11 +596,12 @@ public final class BedHomeManager implements Listener {
         String key = normalizeName(name);
         String world = section.getString("world");
         if (!isValidName(name) || world == null || world.isBlank()) {
+            plugin.getLogger().warning("Ignoring invalid bed home entry '" + fallbackKey + "' for " + owner + ".");
             return null;
         }
 
-        long createdAt = section.getLong("created", System.currentTimeMillis());
-        long lastUsedAt = section.getLong("last-used", createdAt);
+        long createdAt = Math.max(1L, section.getLong("created", System.currentTimeMillis()));
+        long lastUsedAt = Math.max(createdAt, section.getLong("last-used", createdAt));
         return new BedHome(
                 owner, key, name, world,
                 section.getInt("bed-x"), section.getInt("bed-y"), section.getInt("bed-z"),
@@ -589,6 +662,24 @@ public final class BedHomeManager implements Listener {
         }
     }
 
+    private File backupUnreadableFile() {
+        String timestamp = LocalDateTime.now().format(BACKUP_TIMESTAMP);
+        File backup = new File(file.getParentFile(), "beds-unreadable-" + timestamp + ".yml");
+        int suffix = 1;
+        while (backup.exists()) {
+            backup = new File(file.getParentFile(), "beds-unreadable-" + timestamp + "-" + suffix++ + ".yml");
+        }
+
+        try {
+            file.getParentFile().mkdirs();
+            Files.move(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            file.createNewFile();
+        } catch (IOException exception) {
+            plugin.getLogger().severe("Failed to move unreadable beds.yml: " + exception.getMessage());
+        }
+        return backup;
+    }
+
     private PersistenceSnapshot snapshot() {
         Map<UUID, Map<String, BedHome>> bedCopy = new LinkedHashMap<>();
         for (Map.Entry<UUID, Map<String, BedHome>> entry : beds.entrySet()) {
@@ -599,61 +690,75 @@ public final class BedHomeManager implements Listener {
         for (Map.Entry<UUID, List<BedBreakNotice>> entry : pendingBreakNotices.entrySet()) {
             noticeCopy.put(entry.getKey(), new ArrayList<>(entry.getValue()));
         }
-        return new PersistenceSnapshot(bedCopy, noticeCopy, new HashSet<>(migratedOwners));
+        return new PersistenceSnapshot(mutationVersion, bedCopy, noticeCopy);
     }
 
-    private boolean writeSnapshot(PersistenceSnapshot snapshot) {
-        YamlConfiguration config = new YamlConfiguration();
-        ConfigurationSection bedsRoot = config.createSection("beds");
-        for (Map.Entry<UUID, Map<String, BedHome>> ownerEntry : snapshot.beds().entrySet()) {
-            if (ownerEntry.getValue().isEmpty()) {
-                continue;
+    private WriteResult writeSnapshot(PersistenceSnapshot snapshot) {
+        synchronized (ioLock) {
+            if (snapshot.version() < newestRequestedWriteVersion) {
+                return WriteResult.SKIPPED_STALE;
             }
-            ConfigurationSection ownerSection = bedsRoot.createSection(ownerEntry.getKey().toString());
-            for (BedHome home : ownerEntry.getValue().values()) {
-                ConfigurationSection section = ownerSection.createSection(home.getKey());
-                section.set("name", home.getName());
-                section.set("world", home.getWorldName());
-                section.set("bed-x", home.getBedX());
-                section.set("bed-y", home.getBedY());
-                section.set("bed-z", home.getBedZ());
-                section.set("x", home.getX());
-                section.set("y", home.getY());
-                section.set("z", home.getZ());
-                section.set("yaw", (double) home.getYaw());
-                section.set("pitch", (double) home.getPitch());
-                section.set("created", home.getCreatedAt());
-                section.set("last-used", home.getLastUsedAt());
+
+            YamlConfiguration config = new YamlConfiguration();
+            ConfigurationSection bedsRoot = config.createSection("beds");
+            for (Map.Entry<UUID, Map<String, BedHome>> ownerEntry : snapshot.beds().entrySet()) {
+                if (ownerEntry.getValue().isEmpty()) {
+                    continue;
+                }
+                ConfigurationSection ownerSection = bedsRoot.createSection(ownerEntry.getKey().toString());
+                for (BedHome home : ownerEntry.getValue().values()) {
+                    ConfigurationSection section = ownerSection.createSection(home.getKey());
+                    section.set("name", home.getName());
+                    section.set("world", home.getWorldName());
+                    section.set("bed-x", home.getBedX());
+                    section.set("bed-y", home.getBedY());
+                    section.set("bed-z", home.getBedZ());
+                    section.set("x", home.getX());
+                    section.set("y", home.getY());
+                    section.set("z", home.getZ());
+                    section.set("yaw", (double) home.getYaw());
+                    section.set("pitch", (double) home.getPitch());
+                    section.set("created", home.getCreatedAt());
+                    section.set("last-used", home.getLastUsedAt());
+                }
+            }
+
+            ConfigurationSection noticesRoot = config.createSection("notifications");
+            for (Map.Entry<UUID, List<BedBreakNotice>> ownerEntry : snapshot.notices().entrySet()) {
+                if (ownerEntry.getValue().isEmpty()) {
+                    continue;
+                }
+                ConfigurationSection ownerSection = noticesRoot.createSection(ownerEntry.getKey().toString());
+                int index = 0;
+                for (BedBreakNotice notice : ownerEntry.getValue()) {
+                    ConfigurationSection section = ownerSection.createSection(String.valueOf(index++));
+                    section.set("name", notice.name());
+                    section.set("broken", notice.brokenAt());
+                }
+            }
+
+            try {
+                file.getParentFile().mkdirs();
+                config.save(tempFile);
+                moveTempIntoPlace();
+                return WriteResult.WRITTEN;
+            } catch (IOException exception) {
+                plugin.getLogger().warning("Failed to save beds.yml: " + exception.getMessage());
+                return WriteResult.FAILED;
             }
         }
+    }
 
-        List<String> migrated = snapshot.migratedOwners().stream()
-                .map(UUID::toString)
-                .sorted()
-                .toList();
-        config.set("migrated", migrated);
-
-        ConfigurationSection noticesRoot = config.createSection("notifications");
-        for (Map.Entry<UUID, List<BedBreakNotice>> ownerEntry : snapshot.notices().entrySet()) {
-            if (ownerEntry.getValue().isEmpty()) {
-                continue;
-            }
-            ConfigurationSection ownerSection = noticesRoot.createSection(ownerEntry.getKey().toString());
-            int index = 0;
-            for (BedBreakNotice notice : ownerEntry.getValue()) {
-                ConfigurationSection section = ownerSection.createSection(String.valueOf(index++));
-                section.set("name", notice.name());
-                section.set("broken", notice.brokenAt());
-            }
-        }
-
+    private void moveTempIntoPlace() throws IOException {
         try {
-            file.getParentFile().mkdirs();
-            config.save(file);
-            return true;
-        } catch (IOException exception) {
-            plugin.getLogger().warning("Failed to save beds.yml: " + exception.getMessage());
-            return false;
+            Files.move(
+                    tempFile.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -662,6 +767,12 @@ public final class BedHomeManager implements Listener {
         NOT_FOUND,
         INVALID_NAME,
         DUPLICATE
+    }
+
+    private enum WriteResult {
+        WRITTEN,
+        SKIPPED_STALE,
+        FAILED
     }
 
     private record BedBlockKey(String worldName, int x, int y, int z) {
@@ -674,9 +785,9 @@ public final class BedHomeManager implements Listener {
     }
 
     private record PersistenceSnapshot(
+            long version,
             Map<UUID, Map<String, BedHome>> beds,
-            Map<UUID, List<BedBreakNotice>> notices,
-            Set<UUID> migratedOwners
+            Map<UUID, List<BedBreakNotice>> notices
     ) {
     }
 }
