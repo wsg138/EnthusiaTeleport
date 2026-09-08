@@ -23,6 +23,7 @@ public class TaskCoordinator {
 
         scheduleRepeating("dirty-save-flush", 20L, Math.max(1, config.persistence().flushIntervalSeconds()) * 20L, () -> {
             plugin.getHomeManager().flushIfDirtyAsync();
+            plugin.getBedHomeManager().flushIfDirtyAsync();
             plugin.getIgnoreManager().flushIfDirtyAsync();
             plugin.getRtpManager().flushIfDirtyAsync();
             plugin.getLastLocationManager().flushIfDirtyAsync();
