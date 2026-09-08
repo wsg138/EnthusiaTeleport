@@ -35,8 +35,6 @@ public class BedCommand implements CommandExecutor {
         }
 
         BedHomeManager beds = plugin.getBedHomeManager();
-        beds.ensureMigrated(player);
-
         if (args.length == 0) {
             BedHome mostRecent = beds.getMostRecentBed(player.getUniqueId());
             if (mostRecent == null) {
