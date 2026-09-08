@@ -75,8 +75,8 @@ public class BedCommand implements CommandExecutor {
             return;
         }
 
-        Location location = home.toLocation();
-        if (location == null || location.getWorld() == null) {
+        Location initialLocation = home.toLocation();
+        if (initialLocation == null || initialLocation.getWorld() == null) {
             sendOrFallback(msg, player, "bed.missing", "&cYour bed is missing or unavailable.");
             return;
         }
@@ -85,7 +85,15 @@ public class BedCommand implements CommandExecutor {
         if (msg.raw("bed.warmup-start") == null) {
             player.sendMessage(msg.color("&eTeleporting to your bed. Don't move."));
         }
-        tpMgr.startTeleport(player, location, true, null, "bed.warmup-start");
+
+        String bedKey = home.getKey();
+        tpMgr.startTeleportDynamic(
+                player,
+                () -> beds.resolveTeleportLocation(player.getUniqueId(), bedKey),
+                true,
+                null,
+                "bed.warmup-start"
+        );
     }
 
     private boolean listBeds(Player player) {
@@ -143,7 +151,7 @@ public class BedCommand implements CommandExecutor {
                     "&cUnknown bed home: &e" + args[1] + "&c."
             ));
             case INVALID_NAME -> player.sendMessage(plugin.getMessages().color(
-                    "&cBed names cannot be empty, contain dots, or use a /bed subcommand name."
+                    "&cBed names must be 1-32 letters, numbers, underscores, or hyphens and cannot be a /bed subcommand."
             ));
             case DUPLICATE -> player.sendMessage(plugin.getMessages().color(
                     "&cYou already have a bed home named &e" + args[2] + "&c."
