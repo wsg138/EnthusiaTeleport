@@ -129,13 +129,15 @@ The first bed is named `bed` automatically. Additional beds are named `bed2`, `b
 /bed rename <old_name> <new_name>
 ```
 
-`/bed` teleports to the most recently used saved bed. `/bed <name>` teleports to a specific saved bed using the normal warmup and safe-destination handling.
+`/bed` teleports to the most recently used saved bed. `/bed <name>` teleports to a specific saved bed using the normal warmup and safe-destination handling. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
 
 Using a **respawn anchor** changes Minecraft's normal respawn point but does **not** remove or replace any saved bed homes. Bed homes are owned by EnthusiaTeleport independently of the vanilla respawn location.
 
 If a saved bed is broken, burned, or destroyed by an explosion, its bed home is removed. If the owner is online, they are told immediately that `Your bed (bed_name) was broken.` If they are offline, the notification is persisted and shown on their next login as `Your bed (bed_name) was broken {time} ago.`
 
-When this system is first deployed, an existing valid Minecraft bed spawn is migrated into the saved bed-home system when that player next joins. The server-spawn placeholder used for first-join setup is not treated as a real bed home.
+Existing vanilla respawn locations are deliberately **not** auto-imported when this system is first deployed. Bukkit's legacy bed-spawn API can also represent respawn anchors, so guessing from that value could create a false bed home. An existing player only needs to successfully set their spawn with a real bed once after the update for that bed to be registered.
+
+Bed names are case-insensitive for lookup and must be 1-32 letters, numbers, underscores, or hyphens. Names used by `/bed` subcommands are reserved.
 
 ## Spawn
 
