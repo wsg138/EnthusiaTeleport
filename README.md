@@ -115,17 +115,29 @@ This bypasses the home-location safety warning intentionally, but it does not tu
 
 If a player's allowed home limit decreases and they now have more homes than permitted, the plugin does not silently choose which homes to delete. It opens a selection GUI and requires the player to choose exactly which homes to keep; the unselected homes are removed after confirmation.
 
-## Bed teleport
+## Bed homes
+
+Sleeping in a real bed saves that bed as a persistent **bed home**. Bed homes are stored separately from normal `/sethome` homes and do not consume normal home slots.
+
+The first bed is named `bed` automatically. Additional beds are named `bed2`, `bed3`, and so on until the player renames them.
 
 ```text
 /bed
+/bed <name>
+/bed list
+/bed delete <name>
+/bed rename <old_name> <new_name>
 ```
 
-Teleports to the player's current Minecraft bed-spawn location using the normal warmup and safe-destination handling.
+`/bed` teleports to the most recently used saved bed. `/bed <name>` teleports to a specific saved bed using the normal warmup and safe-destination handling. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
 
-If no valid bed spawn exists, the command reports that instead of teleporting.
+Using a **respawn anchor** changes Minecraft's normal respawn point but does **not** remove or replace any saved bed homes. Bed homes are owned by EnthusiaTeleport independently of the vanilla respawn location.
 
-A new player's bed-spawn location is initially set to the server spawn as part of the first-join setup, but sleeping in a bed can establish the player's normal Minecraft bed spawn afterward.
+If a saved bed is broken, burned, or destroyed by an explosion, its bed home is removed. If the owner is online, they are told immediately that `Your bed (bed_name) was broken.` If they are offline, the notification is persisted and shown on their next login as `Your bed (bed_name) was broken {time} ago.`
+
+When the bed-home system is first deployed, EnthusiaTeleport performs a one-time migration of existing vanilla respawn points. Known players are checked gradually, one per tick; a respawn is imported only when it resolves to a real bed, while respawn anchors and the configured server-spawn respawn are skipped. The migration is idempotent and writes a completion marker only after `beds.yml` has been flushed successfully, so an interrupted migration can safely resume on the next startup.
+
+Bed names are case-insensitive for lookup and must be 1-32 letters, numbers, underscores, or hyphens. Names used by `/bed` subcommands are reserved.
 
 ## Spawn
 
@@ -135,14 +147,14 @@ A new player's bed-spawn location is initially set to the server spawn as part o
 
 Teleports to the configured Enthusia spawn using the normal 5-second warmup and safe-location check.
 
-The server currently also **forces normal death respawns to the configured server spawn**. In other words, the `/bed` command can still take a player to their bed spawn, but dying does not currently cause the player to respawn at that bed; the plugin overrides the death respawn location to server spawn.
+The server currently also **forces normal death respawns to the configured server spawn**. In other words, `/bed` can still take a player to a saved bed home, but dying does not currently cause the player to respawn at that bed; the plugin overrides the death respawn location to server spawn.
 
 ## First join
 
 On a player's first-ever join, EnthusiaTeleport currently:
 
 1. teleports the player to server spawn;
-2. sets their initial bed-spawn location to server spawn;
+2. sets their initial Minecraft respawn location to server spawn;
 3. gives the starter kit without clearing any items already present.
 
 Current starter kit:
@@ -171,7 +183,10 @@ The first-join numbering/welcome broadcast used elsewhere on Enthusia is handled
 /home [name]
 /homes
 /delhome <name>
-/bed
+/bed [name]
+/bed list
+/bed delete <name>
+/bed rename <old_name> <new_name>
 /spawn
 ```
 

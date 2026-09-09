@@ -8,6 +8,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.home.BedHome;
 import org.enthusia.teleport.home.Home;
 import org.enthusia.teleport.home.HomeManager;
 import org.enthusia.teleport.request.TeleportRequestManager;
@@ -30,6 +31,7 @@ public class TeleportTabCompleter implements TabCompleter {
     private static final int FOURTH_ARGUMENT = 4;
     private static final List<String> ETELEPORT_OPTIONS = Arrays.asList("reload", "performance", "homes");
     private static final List<String> ETELEPORT_HOME_ACTIONS = Arrays.asList("clear", "del", "tp");
+    private static final List<String> BED_ACTIONS = Arrays.asList("list", "delete", "rename", "help");
 
     private final EnthusiaTeleportPlugin plugin;
 
@@ -52,6 +54,7 @@ public class TeleportTabCompleter implements TabCompleter {
             case "home" -> tabHome(sender, args);
             case "homes" -> tabHomes(sender, args);
             case "delhome" -> tabDelHome(sender, args);
+            case "bed" -> tabBed(sender, args);
             case "tppos" -> tabTppos(args);
             case "tpo" -> tabOfflinePlayers(args);
             case "eteleport" -> tabEteleport(args);
@@ -85,12 +88,10 @@ public class TeleportTabCompleter implements TabCompleter {
             String prefix = args[0].toLowerCase(Locale.ROOT);
             List<String> suggestions = new ArrayList<>();
 
-            // "list" option
             if ("list".startsWith(prefix)) {
                 suggestions.add("list");
             }
 
-            // player names
             suggestions.addAll(
                     Bukkit.getOnlinePlayers().stream()
                             .map(Player::getName)
@@ -113,7 +114,6 @@ public class TeleportTabCompleter implements TabCompleter {
         HomeManager hm = plugin.getHomeManager();
 
         if (args.length == FIRST_ARGUMENT) {
-            // /home <name>
             String prefix = args[0].toLowerCase(Locale.ROOT);
             return hm.getHomes(player.getUniqueId()).stream()
                     .map(Home::getName)
@@ -123,7 +123,6 @@ public class TeleportTabCompleter implements TabCompleter {
         }
 
         if (args.length == SECOND_ARGUMENT) {
-            // /home <name> <force?>
             String second = args[1].toLowerCase(Locale.ROOT);
             if ("force".startsWith(second)) {
                 return Collections.singletonList("force");
@@ -157,8 +156,41 @@ public class TeleportTabCompleter implements TabCompleter {
                 .collect(Collectors.toList());
     }
 
+    private List<String> tabBed(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            return Collections.emptyList();
+        }
+
+        if (args.length == FIRST_ARGUMENT) {
+            String prefix = args[0].toLowerCase(Locale.ROOT);
+            List<String> suggestions = BED_ACTIONS.stream()
+                    .filter(option -> option.startsWith(prefix))
+                    .collect(Collectors.toCollection(ArrayList::new));
+            plugin.getBedHomeManager().getBeds(player.getUniqueId()).stream()
+                    .map(BedHome::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .forEach(suggestions::add);
+            return suggestions;
+        }
+
+        if (args.length == SECOND_ARGUMENT
+                && (ignoresEqualCase(args[0], "delete")
+                || ignoresEqualCase(args[0], "del")
+                || ignoresEqualCase(args[0], "remove")
+                || ignoresEqualCase(args[0], "rename"))) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return plugin.getBedHomeManager().getBeds(player.getUniqueId()).stream()
+                    .map(BedHome::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
+                    .collect(Collectors.toList());
+        }
+
+        return Collections.emptyList();
+    }
+
     private List<String> tabTppos(String[] args) {
-        // Only suggest world names for 4th argument
         if (args.length != FOURTH_ARGUMENT) return Collections.emptyList();
 
         String prefix = args[3].toLowerCase(Locale.ROOT);

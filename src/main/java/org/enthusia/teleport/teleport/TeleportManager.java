@@ -228,6 +228,18 @@ public final class TeleportManager implements TeleportApi, Listener {
         startTeleport(player, () -> target, useSafeSearch, anchor, warmupKey, onSuccess, flags);
     }
 
+    /**
+     * Starts a standard teleport whose destination is resolved again when the warmup completes.
+     * This is intended for destinations that can become invalid while the player is waiting.
+     */
+    public void startTeleportDynamic(Player player,
+                                     Supplier<Location> targetSupplier,
+                                     boolean useSafeSearch,
+                                     Player anchor,
+                                     String warmupKey) {
+        startTeleport(player, targetSupplier, useSafeSearch, anchor, warmupKey, null, TeleportFlags.standard());
+    }
+
     public void startTeleportToLivePlayer(Player player,
                                           Player anchor,
                                           boolean useSafeSearch,
