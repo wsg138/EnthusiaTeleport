@@ -73,8 +73,8 @@ commands:
     permission: enthusia.teleport.delhome
 
   bed:
-    description: Teleport to your bed spawn.
-    usage: /bed
+    description: Teleport to and manage persistent named bed homes.
+    usage: /bed [name|list|delete <name>|rename <old> <new>]
     permission: enthusia.teleport.bed
 
   spawn:
