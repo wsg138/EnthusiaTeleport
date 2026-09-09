@@ -3,6 +3,8 @@ package org.enthusia.teleport.home;
 import com.destroystokyo.paper.event.player.PlayerSetSpawnEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Bed;
@@ -20,6 +22,8 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
 import java.io.File;
@@ -29,9 +33,11 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -61,6 +67,7 @@ public final class BedHomeManager implements Listener {
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
     private final File tempFile;
+    private final File vanillaImportMarker;
     private final Object ioLock = new Object();
     private final Map<UUID, Map<String, BedHome>> beds = new ConcurrentHashMap<>();
     private final Map<UUID, List<BedBreakNotice>> pendingBreakNotices = new ConcurrentHashMap<>();
@@ -70,17 +77,23 @@ public final class BedHomeManager implements Listener {
     private long persistedVersion;
     private volatile long newestRequestedWriteVersion;
     private volatile boolean saveInProgress;
+    private boolean vanillaImportRunning;
+    private BukkitTask vanillaImportTask;
 
     public BedHomeManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "beds.yml");
         this.tempFile = new File(plugin.getDataFolder(), "beds.yml.tmp");
+        this.vanillaImportMarker = new File(plugin.getDataFolder(), "beds-vanilla-import-v1.done");
         load();
+        scheduleVanillaImportIfNeeded();
     }
 
     public void reload() {
+        cancelVanillaImport();
         recentBedInteractions.clear();
         load();
+        scheduleVanillaImportIfNeeded();
     }
 
     public Collection<BedHome> getBeds(UUID owner) {
@@ -371,6 +384,158 @@ public final class BedHomeManager implements Listener {
                 source.getYaw(), source.getPitch(),
                 source.getCreatedAt(), source.getLastUsedAt()
         );
+    }
+
+    private void scheduleVanillaImportIfNeeded() {
+        if (vanillaImportMarker.exists() || vanillaImportRunning) {
+            return;
+        }
+        Bukkit.getScheduler().runTask(plugin, this::startVanillaImportIfNeeded);
+    }
+
+    private void startVanillaImportIfNeeded() {
+        if (vanillaImportMarker.exists() || vanillaImportRunning || !plugin.isEnabled()) {
+            return;
+        }
+
+        Deque<OfflinePlayer> queue = new ArrayDeque<>();
+        for (OfflinePlayer offlinePlayer : Bukkit.getOfflinePlayers()) {
+            if (offlinePlayer.hasPlayedBefore()) {
+                queue.addLast(offlinePlayer);
+            }
+        }
+
+        if (queue.isEmpty()) {
+            completeVanillaImport(0, 0, 0, 0);
+            return;
+        }
+
+        vanillaImportRunning = true;
+        plugin.getLogger().info("Starting one-time import of existing vanilla bed respawns into beds.yml for "
+                + queue.size() + " known players.");
+
+        BukkitRunnable runnable = new BukkitRunnable() {
+            private int imported;
+            private int alreadyPresent;
+            private int noRespawn;
+            private int skipped;
+
+            @Override
+            public void run() {
+                if (!plugin.isEnabled()) {
+                    vanillaImportRunning = false;
+                    vanillaImportTask = null;
+                    cancel();
+                    return;
+                }
+
+                OfflinePlayer offlinePlayer = queue.pollFirst();
+                if (offlinePlayer == null) {
+                    vanillaImportRunning = false;
+                    vanillaImportTask = null;
+                    completeVanillaImport(imported, alreadyPresent, noRespawn, skipped);
+                    cancel();
+                    return;
+                }
+
+                try {
+                    ImportResult result = importVanillaBed(offlinePlayer);
+                    switch (result) {
+                        case IMPORTED -> imported++;
+                        case ALREADY_PRESENT -> alreadyPresent++;
+                        case NO_RESPAWN -> noRespawn++;
+                        case NOT_A_BED -> skipped++;
+                    }
+                } catch (RuntimeException exception) {
+                    skipped++;
+                    plugin.getLogger().warning("Failed to inspect vanilla respawn for "
+                            + offlinePlayer.getUniqueId() + ": " + exception.getMessage());
+                }
+            }
+        };
+        vanillaImportTask = runnable.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private ImportResult importVanillaBed(OfflinePlayer offlinePlayer) {
+        Location respawn = offlinePlayer.getRespawnLocation(true);
+        if (respawn == null || respawn.getWorld() == null) {
+            return ImportResult.NO_RESPAWN;
+        }
+
+        Location configuredSpawn = plugin.getSpawnManager() == null ? null : plugin.getSpawnManager().getSpawnLocation();
+        if (configuredSpawn != null
+                && configuredSpawn.getWorld() == respawn.getWorld()
+                && configuredSpawn.distanceSquared(respawn) <= 1.0D) {
+            return ImportResult.NOT_A_BED;
+        }
+
+        Block respawnBlock = respawn.getWorld().getBlockAt(respawn.getBlockX(), respawn.getBlockY(), respawn.getBlockZ());
+        if (respawnBlock.getType() == Material.RESPAWN_ANCHOR) {
+            return ImportResult.NOT_A_BED;
+        }
+
+        BedBlockKey bedKey = canonicalBed(respawnBlock);
+        if (bedKey == null) {
+            bedKey = findUniqueBedNear(respawn);
+        }
+        if (bedKey == null) {
+            return ImportResult.NOT_A_BED;
+        }
+
+        UUID owner = offlinePlayer.getUniqueId();
+        if (findBedAt(owner, bedKey) != null) {
+            return ImportResult.ALREADY_PRESENT;
+        }
+
+        Map<String, BedHome> ownerBeds = getMap(owner);
+        String name = nextDefaultName(ownerBeds);
+        String key = normalizeName(name);
+        long timestamp = offlinePlayer.getLastSeen();
+        if (timestamp <= 0L) {
+            timestamp = System.currentTimeMillis();
+        }
+
+        BedHome imported = new BedHome(
+                owner, key, name,
+                bedKey.worldName(), bedKey.x(), bedKey.y(), bedKey.z(),
+                respawn.getX(), respawn.getY(), respawn.getZ(),
+                respawn.getYaw(), respawn.getPitch(),
+                timestamp, timestamp
+        );
+        ownerBeds.put(key, imported);
+        markDirty();
+        return ImportResult.IMPORTED;
+    }
+
+    private void completeVanillaImport(int imported, int alreadyPresent, int noRespawn, int skipped) {
+        flushBlocking();
+        if (mutationVersion > persistedVersion) {
+            plugin.getLogger().severe("Vanilla bed import finished scanning, but beds.yml could not be flushed. "
+                    + "The import will be retried on the next startup.");
+            return;
+        }
+
+        try {
+            vanillaImportMarker.getParentFile().mkdirs();
+            if (!vanillaImportMarker.exists()) {
+                vanillaImportMarker.createNewFile();
+            }
+            plugin.getLogger().info("Vanilla bed import complete: imported=" + imported
+                    + ", already-present=" + alreadyPresent
+                    + ", no-respawn=" + noRespawn
+                    + ", skipped-not-bed=" + skipped + ".");
+        } catch (IOException exception) {
+            plugin.getLogger().warning("Vanilla beds were imported, but the completion marker could not be written. "
+                    + "The next startup may rescan them safely. Cause: " + exception.getMessage());
+        }
+    }
+
+    private void cancelVanillaImport() {
+        if (vanillaImportTask != null && !vanillaImportTask.isCancelled()) {
+            vanillaImportTask.cancel();
+        }
+        vanillaImportTask = null;
+        vanillaImportRunning = false;
     }
 
     private void handleDestroyedBlocks(List<Block> blocks) {
@@ -767,6 +932,13 @@ public final class BedHomeManager implements Listener {
         NOT_FOUND,
         INVALID_NAME,
         DUPLICATE
+    }
+
+    private enum ImportResult {
+        IMPORTED,
+        ALREADY_PRESENT,
+        NO_RESPAWN,
+        NOT_A_BED
     }
 
     private enum WriteResult {
