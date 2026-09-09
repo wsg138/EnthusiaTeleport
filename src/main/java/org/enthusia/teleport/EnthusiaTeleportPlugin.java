@@ -136,7 +136,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         messages.reload();
         ignoreManager.reload();
         homeManager.reload();
-        bedHomeManager.reload();
+        // beds.yml is live runtime state, not configuration. Keeping the same manager generation
+        // across /eteleport reload also prevents an older asynchronous save callback from being
+        // applied to freshly reset persistence counters and lets the one-time vanilla import finish.
         rtpManager.reload();
         combatManager.reload();
         backManager.reload();
