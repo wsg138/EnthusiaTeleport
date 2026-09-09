@@ -406,7 +406,7 @@ public final class BedHomeManager implements Listener {
         }
 
         if (queue.isEmpty()) {
-            completeVanillaImport(0, 0, 0, 0);
+            completeVanillaImport(0, 0, 0, 0, 0);
             return;
         }
 
@@ -419,6 +419,7 @@ public final class BedHomeManager implements Listener {
             private int alreadyPresent;
             private int noRespawn;
             private int skipped;
+            private int failures;
 
             @Override
             public void run() {
@@ -433,7 +434,7 @@ public final class BedHomeManager implements Listener {
                 if (offlinePlayer == null) {
                     vanillaImportRunning = false;
                     vanillaImportTask = null;
-                    completeVanillaImport(imported, alreadyPresent, noRespawn, skipped);
+                    completeVanillaImport(imported, alreadyPresent, noRespawn, skipped, failures);
                     cancel();
                     return;
                 }
@@ -447,7 +448,7 @@ public final class BedHomeManager implements Listener {
                         case NOT_A_BED -> skipped++;
                     }
                 } catch (RuntimeException exception) {
-                    skipped++;
+                    failures++;
                     plugin.getLogger().warning("Failed to inspect vanilla respawn for "
                             + offlinePlayer.getUniqueId() + ": " + exception.getMessage());
                 }
@@ -507,11 +508,18 @@ public final class BedHomeManager implements Listener {
         return ImportResult.IMPORTED;
     }
 
-    private void completeVanillaImport(int imported, int alreadyPresent, int noRespawn, int skipped) {
+    private void completeVanillaImport(int imported, int alreadyPresent, int noRespawn, int skipped, int failures) {
         flushBlocking();
         if (mutationVersion > persistedVersion) {
             plugin.getLogger().severe("Vanilla bed import finished scanning, but beds.yml could not be flushed. "
                     + "The import will be retried on the next startup.");
+            return;
+        }
+
+        if (failures > 0) {
+            plugin.getLogger().warning("Vanilla bed import inspected the player list but " + failures
+                    + " player respawn lookup(s) failed. beds.yml was preserved, but the completion marker was not written; "
+                    + "the scan will retry safely on the next startup.");
             return;
         }
 
