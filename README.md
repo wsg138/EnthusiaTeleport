@@ -135,7 +135,7 @@ Using a **respawn anchor** changes Minecraft's normal respawn point but does **n
 
 If a saved bed is broken, burned, or destroyed by an explosion, its bed home is removed. If the owner is online, they are told immediately that `Your bed (bed_name) was broken.` If they are offline, the notification is persisted and shown on their next login as `Your bed (bed_name) was broken {time} ago.`
 
-Existing vanilla respawn locations are deliberately **not** auto-imported when this system is first deployed. Bukkit's legacy bed-spawn API can also represent respawn anchors, so guessing from that value could create a false bed home. An existing player only needs to successfully set their spawn with a real bed once after the update for that bed to be registered.
+When the bed-home system is first deployed, EnthusiaTeleport performs a one-time migration of existing vanilla respawn points. Known players are checked gradually, one per tick; a respawn is imported only when it resolves to a real bed, while respawn anchors and the configured server-spawn respawn are skipped. The migration is idempotent and writes a completion marker only after `beds.yml` has been flushed successfully, so an interrupted migration can safely resume on the next startup.
 
 Bed names are case-insensitive for lookup and must be 1-32 letters, numbers, underscores, or hyphens. Names used by `/bed` subcommands are reserved.
 
