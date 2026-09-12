@@ -117,27 +117,44 @@ If a player's allowed home limit decreases and they now have more homes than per
 
 ## Bed homes
 
-Sleeping in a real bed saves that bed as a persistent **bed home**. Bed homes are stored separately from normal `/sethome` homes and do not consume normal home slots.
+Sleeping in a real bed saves that bed as a persistent **bed home** only when the player does not already have one. Bed homes are stored separately from normal `/sethome` homes and do not consume normal home slots.
 
-The first bed is named `bed` automatically. Additional beds are named `bed2`, `bed3`, and so on until the player renames them.
+Each player may have **one saved bed**. The first saved bed is named `bed` automatically. Sleeping in that same bed may refresh it normally. Sleeping in a different bed still allows the player to sleep, but the new bed does **not** replace the saved `/bed`; the player is told to delete the current saved bed first.
 
 ```text
 /bed
-/bed <name>
 /bed list
+/bed manage
 /bed delete <name>
 /bed rename <old_name> <new_name>
 ```
 
-`/bed` teleports to the most recently used saved bed. `/bed <name>` teleports to a specific saved bed using the normal warmup and safe-destination handling. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
+`/bed` teleports to the player's saved bed using the normal warmup and safe-destination handling. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
 
-Using a **respawn anchor** changes Minecraft's normal respawn point but does **not** remove or replace any saved bed homes. Bed homes are owned by EnthusiaTeleport independently of the vanilla respawn location.
+To move `/bed` to another base, the player must first remove the current saved bed with `/bed delete <name>` or `/bed manage`, then successfully use the new bed. Merely sleeping in another bed does not overwrite the saved location.
+
+### Legacy multi-bed cleanup
+
+Players who already have more than one saved bed from the previous multi-bed implementation are placed into an over-limit migration state. Existing entries are preserved; the plugin does not automatically choose or delete a location.
+
+While a player has more than one saved bed:
+
+- all `/bed` teleport attempts are blocked;
+- the player is warned on join and when attempting to use bed teleporting;
+- `/bed list` remains available and shows each bed's name, world, and coordinates;
+- `/bed manage` opens a paginated management GUI showing each bed's name, world, and coordinates;
+- clicking a bed in the management GUI requires deletion confirmation;
+- `/bed delete <name>` remains available as a command-based cleanup path.
+
+As soon as only one saved bed remains, the migration restriction is removed automatically and bed teleporting is available again.
+
+Using a **respawn anchor** changes Minecraft's normal respawn point but does **not** remove or replace the saved bed home. Bed homes are owned by EnthusiaTeleport independently of the vanilla respawn location.
 
 If a saved bed is broken, burned, or destroyed by an explosion, its bed home is removed. If the owner is online, they are told immediately that `Your bed (bed_name) was broken.` If they are offline, the notification is persisted and shown on their next login as `Your bed (bed_name) was broken {time} ago.`
 
 When the bed-home system is first deployed, EnthusiaTeleport performs a one-time migration of existing vanilla respawn points. Known players are checked gradually, one per tick; a respawn is imported only when it resolves to a real bed, while respawn anchors and the configured server-spawn respawn are skipped. The migration is idempotent and writes a completion marker only after `beds.yml` has been flushed successfully, so an interrupted migration can safely resume on the next startup.
 
-Bed names are case-insensitive for lookup and must be 1-32 letters, numbers, underscores, or hyphens. Names used by `/bed` subcommands are reserved.
+Bed names are case-insensitive for lookup and must be 1-32 letters, numbers, underscores, or hyphens. Names used by `/bed` subcommands are reserved for new renames.
 
 ## Spawn
 
@@ -183,8 +200,9 @@ The first-join numbering/welcome broadcast used elsewhere on Enthusia is handled
 /home [name]
 /homes
 /delhome <name>
-/bed [name]
+/bed
 /bed list
+/bed manage
 /bed delete <name>
 /bed rename <old_name> <new_name>
 /spawn
