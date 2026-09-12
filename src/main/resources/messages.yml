@@ -64,7 +64,7 @@ teleport.cancelled-requester: "&aYou cancelled your pending teleport request(s).
 teleport.cancelled-target: "&e{sender}&c cancelled their teleport request."
 
 ignore.toggle-on: "&eYou will now &cignore &eteleport requests from &6{target}&e."
-ignore.toggle-off: "&eYou will now &areceive &eteleport requests from &6{target}&e."
+ignore.toggle-off: "&eYou will now &areceive &ateleport requests from &6{target}&e."
 ignore.list-header: "&6You are ignoring teleport requests from:"
 ignore.list-entry: "&7- &e{player}"
 ignore.list-empty: "&7You are not ignoring any teleport requests."
@@ -72,7 +72,7 @@ ignore.list-empty: "&7You are not ignoring any teleport requests."
 spawn.warmup-start: "&eTeleporting to spawn in &6{seconds}s&e. Don't move."
 spawn.teleported: "&aTeleported to spawn."
 
-bed.not-set: "&cYou do not have a bed spawn set."
+bed.not-set: "&cYou do not have a saved bed set."
 bed.missing: "&cYour bed is missing or obstructed."
 bed.warmup-start: "&eTeleporting to your bed in &6{seconds}s&e. Don't move."
 
