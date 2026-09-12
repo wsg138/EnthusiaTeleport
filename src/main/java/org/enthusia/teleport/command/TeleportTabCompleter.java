@@ -31,7 +31,7 @@ public class TeleportTabCompleter implements TabCompleter {
     private static final int FOURTH_ARGUMENT = 4;
     private static final List<String> ETELEPORT_OPTIONS = Arrays.asList("reload", "performance", "homes");
     private static final List<String> ETELEPORT_HOME_ACTIONS = Arrays.asList("clear", "del", "tp");
-    private static final List<String> BED_ACTIONS = Arrays.asList("list", "delete", "rename", "help");
+    private static final List<String> BED_ACTIONS = Arrays.asList("list", "manage", "delete", "rename", "help");
 
     private final EnthusiaTeleportPlugin plugin;
 
