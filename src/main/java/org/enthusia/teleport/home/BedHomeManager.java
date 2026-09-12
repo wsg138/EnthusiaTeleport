@@ -337,6 +337,13 @@ public final class BedHomeManager implements Listener {
             return;
         }
 
+        // The command listener normally cancels a different BED spawn before this MONITOR listener
+        // runs. Keep the persistence layer safe on its own as well so future listener changes,
+        // external event manipulation, or retries cannot recreate the old unlimited-bed behavior.
+        if (!BedAccessPolicy.canCreateNew(ownerBeds.values())) {
+            return;
+        }
+
         String name = nextDefaultName(ownerBeds);
         String key = normalizeName(name);
         BedHome bedHome = new BedHome(
@@ -489,6 +496,12 @@ public final class BedHomeManager implements Listener {
         }
 
         Map<String, BedHome> ownerBeds = getMap(owner);
+        // Import exists only to seed players who do not already have a persistent saved bed.
+        // Never let a retry or stale vanilla respawn create a second bed home.
+        if (!BedAccessPolicy.canCreateNew(ownerBeds.values())) {
+            return ImportResult.ALREADY_PRESENT;
+        }
+
         String name = nextDefaultName(ownerBeds);
         String key = normalizeName(name);
         long timestamp = offlinePlayer.getLastSeen();
