@@ -123,13 +123,14 @@ Each player may have **one saved bed**. The first saved bed is named `bed` autom
 
 ```text
 /bed
+/bed <name>
 /bed list
 /bed manage
 /bed delete <name>
 /bed rename <old_name> <new_name>
 ```
 
-`/bed` teleports to the player's saved bed using the normal warmup and safe-destination handling. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
+`/bed` teleports to the player's saved bed using the normal warmup and safe-destination handling. `/bed <name>` teleports to the saved bed when its name matches, which remains useful after renaming a bed. The bed is checked again when the warmup completes, so destroying, deleting, or renaming it during the warmup cannot teleport the player to a stale location.
 
 To move `/bed` to another base, the player must first remove the current saved bed with `/bed delete <name>` or `/bed manage`, then successfully use the new bed. Merely sleeping in another bed does not overwrite the saved location.
 
@@ -139,7 +140,7 @@ Players who already have more than one saved bed from the previous multi-bed imp
 
 While a player has more than one saved bed:
 
-- all `/bed` teleport attempts are blocked;
+- all `/bed` teleport attempts, including `/bed <name>`, are blocked;
 - the player is warned on join and when attempting to use bed teleporting;
 - `/bed list` remains available and shows each bed's name, world, and coordinates;
 - `/bed manage` opens a paginated management GUI showing each bed's name, world, and coordinates;
@@ -200,7 +201,7 @@ The first-join numbering/welcome broadcast used elsewhere on Enthusia is handled
 /home [name]
 /homes
 /delhome <name>
-/bed
+/bed [name]
 /bed list
 /bed manage
 /bed delete <name>
