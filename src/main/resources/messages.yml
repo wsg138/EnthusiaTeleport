@@ -52,6 +52,7 @@ teleport.request.tpa-here-sent: "&aTeleport-here request sent to &e{target}&a. T
 teleport.request.to-receiver-here: "&e{sender} &ahas requested that you teleport to them."
 teleport.request.to-receiver-here-extra: "&7Use &e/tpaccept {sender}&7 to accept, &e/tpadeny {sender}&7 to deny. &8(Expires in {seconds}s)"
 teleport.request.cancelled-tpahere-combat: "&cYou can no longer teleport to &e{player}&c because they entered combat."
+teleport.request.teleporter-in-combat: "&cYou cannot accept this request while &e{player}&c is in combat."
 
 teleport.no-pending: "&cYou do not have any pending teleport requests."
 teleport.no-pending-from: "&cYou do not have any pending teleport requests from &e{sender}&c."
