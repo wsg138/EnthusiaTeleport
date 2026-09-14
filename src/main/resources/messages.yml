@@ -25,6 +25,8 @@ teleport.warmup-cancelled-damage: "&cTeleport cancelled because you took damage.
 teleport.warmup-cancelled-damage-other: "&e{player}'s teleport to you was cancelled because they took damage."
 teleport.warmup-cancelled-combat: "&cTeleport cancelled because you entered combat."
 teleport.warmup-cancelled-combat-other: "&e{player}'s teleport to you was cancelled because they entered combat."
+teleport.warmup-cancelled-anchor-combat: "&cTeleport cancelled because &e{player}&c entered combat."
+teleport.warmup-cancelled-anchor-combat-other: "&e{player}'s teleport to you was cancelled because you entered combat."
 teleport.warmup-cancelled-disconnect: "&cTeleport cancelled because the other player disconnected."
 teleport.warmup-cancelled-disconnect-other: "&e{player}'s teleport was cancelled because the other player disconnected."
 
