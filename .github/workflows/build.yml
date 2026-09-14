@@ -22,6 +22,44 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Verify CombatLogX API contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_ref() {
+            local ref="$1"
+            local base="https://raw.githubusercontent.com/SirBlobman/CombatLogX/${ref}"
+            local dir
+            dir="$(mktemp -d)"
+
+            curl --fail --silent --show-error --location \
+              "${base}/api/src/main/java/com/github/sirblobman/combatlogx/api/manager/ICombatManager.java" \
+              -o "${dir}/ICombatManager.java"
+            curl --fail --silent --show-error --location \
+              "${base}/api/src/main/java/com/github/sirblobman/combatlogx/api/event/PlayerTagEvent.java" \
+              -o "${dir}/PlayerTagEvent.java"
+            curl --fail --silent --show-error --location \
+              "${base}/api/src/main/java/com/github/sirblobman/combatlogx/api/event/CustomPlayerEvent.java" \
+              -o "${dir}/CustomPlayerEvent.java"
+            curl --fail --silent --show-error --location \
+              "${base}/plugin/src/main/java/com/github/sirblobman/combatlogx/CombatPlugin.java" \
+              -o "${dir}/CombatPlugin.java"
+            curl --fail --silent --show-error --location \
+              "${base}/plugin/gradle.properties" \
+              -o "${dir}/plugin-gradle.properties"
+
+            grep -Fq 'boolean isInCombat(@NotNull Player player);' "${dir}/ICombatManager.java"
+            grep -Fq 'public final class PlayerTagEvent extends CustomPlayerEvent' "${dir}/PlayerTagEvent.java"
+            grep -Fq 'public abstract class CustomPlayerEvent extends PlayerEvent' "${dir}/CustomPlayerEvent.java"
+            grep -Fq 'public @NotNull ICombatManager getCombatManager()' "${dir}/CombatPlugin.java"
+            grep -Fq 'bukkit.plugin.name=CombatLogX' "${dir}/plugin-gradle.properties"
+            grep -Fq 'bukkit.plugin.main=com.github.sirblobman.combatlogx.CombatPlugin' "${dir}/plugin-gradle.properties"
+          }
+
+          # 11.6 release-line source immediately before the 11.6.0.0.1286 bundle.
+          verify_ref fb04b2959c139ad8c556e161e968a295a4d5f958
+          # Vetted 11.7 development head from the integration audit.
+          verify_ref 113228f3860b3d52687bb3da0f9b8ee7af6eae9c
       - name: Build
         run: mvn -B clean package
       - name: Upload plugin jar
