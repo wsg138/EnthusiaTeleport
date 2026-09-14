@@ -36,8 +36,7 @@ public class TpAcceptCommand implements CommandExecutor {
         // /tpaccept is gated by the accepter's combat state at acceptance time.
         // Once accepted, the anchor entering combat later does not invalidate the
         // already-started teleport for the other player.
-        if (plugin.getCombatManager().isInCombat(target)
-                && !target.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+        if (isCombatBlocked(target)) {
             msg.send(target, "teleport.combat-blocked");
             return true;
         }
@@ -74,9 +73,7 @@ public class TpAcceptCommand implements CommandExecutor {
         // This is a backstop for the CombatLogX PlayerTagEvent listener; accepted
         // requests are removed before warmup starts and are intentionally not checked
         // again if the anchor enters combat later.
-        if (req.getType() == TeleportRequestType.TPA_HERE
-                && plugin.getCombatManager().isInCombat(senderPlayer)
-                && !senderPlayer.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+        if (req.getType() == TeleportRequestType.TPA_HERE && isCombatBlocked(senderPlayer)) {
             reqMgr.removeRequest(req);
             msg.send(target, "teleport.request.cancelled-tpahere-combat",
                     Map.of("player", senderPlayer.getName()));
@@ -94,6 +91,15 @@ public class TpAcceptCommand implements CommandExecutor {
         } else {
             teleporter = targetPlayer;
             anchor = senderPlayer;
+        }
+
+        // A normal /tpa may stay pending while its requester is in combat, but it
+        // must not be consumed as "accepted" until that requester can actually begin
+        // the teleport. This also prevents misleading acceptance messages.
+        if (isCombatBlocked(teleporter)) {
+            msg.send(target, "teleport.request.teleporter-in-combat",
+                    Map.of("player", teleporter.getName()));
+            return true;
         }
 
         int warmupSeconds = teleporter.hasPermission("enthusia.teleport.bypass-teleport")
@@ -117,5 +123,10 @@ public class TpAcceptCommand implements CommandExecutor {
         );
 
         return true;
+    }
+
+    private boolean isCombatBlocked(Player player) {
+        return plugin.getCombatManager().isInCombat(player)
+                && !player.hasPermission(BYPASS_COMBAT_PERMISSION);
     }
 }
