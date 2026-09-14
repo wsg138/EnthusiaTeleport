@@ -122,7 +122,8 @@ public class CombatTagManager implements Listener {
             if (!(taggedPlayer instanceof Player player)) {
                 return;
             }
-            if (player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+            if (!CombatTeleportPolicy.shouldReactToCombatEntry(
+                    player.hasPermission(BYPASS_COMBAT_PERMISSION))) {
                 return;
             }
 
