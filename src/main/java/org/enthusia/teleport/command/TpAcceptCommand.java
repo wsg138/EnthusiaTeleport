@@ -34,8 +34,6 @@ public class TpAcceptCommand implements CommandExecutor {
         }
 
         // /tpaccept is gated by the accepter's combat state at acceptance time.
-        // Once accepted, the anchor entering combat later does not invalidate the
-        // already-started teleport for the other player.
         if (isCombatBlocked(target)) {
             msg.send(target, "teleport.combat-blocked");
             return true;
@@ -70,9 +68,7 @@ public class TpAcceptCommand implements CommandExecutor {
         }
 
         // A pending /tpahere becomes invalid as soon as its sender enters combat.
-        // This is a backstop for the CombatLogX PlayerTagEvent listener; accepted
-        // requests are removed before warmup starts and are intentionally not checked
-        // again if the anchor enters combat later.
+        // This is a backstop for the CombatLogX PlayerTagEvent listener.
         if (req.getType() == TeleportRequestType.TPA_HERE && isCombatBlocked(senderPlayer)) {
             reqMgr.removeRequest(req);
             msg.send(target, "teleport.request.cancelled-tpahere-combat",
@@ -119,7 +115,8 @@ public class TpAcceptCommand implements CommandExecutor {
                 true,
                 "teleport.warmup-start",
                 null,
-                TeleportManager.TeleportFlags.standard()
+                TeleportManager.TeleportFlags.standard(),
+                req.getType() == TeleportRequestType.TPA_HERE
         );
 
         return true;
