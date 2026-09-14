@@ -117,6 +117,40 @@ public class TeleportRequestManager implements Listener {
         return new ArrayList<>(getIncomingMap(target.getUniqueId()).values());
     }
 
+    /**
+     * Expires only pending /tpahere requests sent by a player who has just entered combat.
+     * Accepted requests are already removed from this manager, so their active teleport is
+     * intentionally left alone.
+     */
+    public int cancelOutgoingTpahereForCombat(Player combatPlayer) {
+        if (combatPlayer == null) {
+            return 0;
+        }
+
+        UUID senderId = combatPlayer.getUniqueId();
+        Map<UUID, TeleportRequest> senderRequests = outgoing.get(senderId);
+        if (senderRequests == null || senderRequests.isEmpty()) {
+            return 0;
+        }
+
+        int cancelled = 0;
+        for (TeleportRequest request : new ArrayList<>(senderRequests.values())) {
+            if (request.getType() != TeleportRequestType.TPA_HERE) {
+                continue;
+            }
+
+            removeRequest(request);
+            cancelled++;
+
+            Player target = Bukkit.getPlayer(request.getTarget());
+            if (target != null && target.isOnline()) {
+                plugin.getMessages().send(target, "teleport.request.cancelled-tpahere-combat",
+                        Map.of("player", combatPlayer.getName()));
+            }
+        }
+        return cancelled;
+    }
+
     public void removeRequest(TeleportRequest request) {
         if (request == null) {
             return;
