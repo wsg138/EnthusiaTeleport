@@ -281,6 +281,15 @@ public final class TeleportManager implements TeleportApi, Listener {
                                           boolean useSafeSearch,
                                           String warmupKey,
                                           Runnable onSuccess,
+                                          TeleportFlags flags) {
+        startTeleportToLivePlayer(player, anchor, useSafeSearch, warmupKey, onSuccess, flags, false);
+    }
+
+    public void startTeleportToLivePlayer(Player player,
+                                          Player anchor,
+                                          boolean useSafeSearch,
+                                          String warmupKey,
+                                          Runnable onSuccess,
                                           TeleportFlags flags,
                                           boolean cancelOnAnchorCombat) {
         startTeleport(
