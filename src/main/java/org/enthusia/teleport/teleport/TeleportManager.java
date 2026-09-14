@@ -360,6 +360,10 @@ public final class TeleportManager implements TeleportApi, Listener {
                 messages.send(player, "teleport.warmup-cancelled-damage");
                 notifyAnchor(active, "teleport.warmup-cancelled-damage-other", player);
             }
+            case COMBAT -> {
+                messages.send(player, "teleport.warmup-cancelled-combat");
+                notifyAnchor(active, "teleport.warmup-cancelled-combat-other", player);
+            }
             case DISCONNECT -> {
                 messages.send(player, "teleport.warmup-cancelled-disconnect");
                 notifyAnchor(active, "teleport.warmup-cancelled-disconnect-other", player);
