@@ -40,6 +40,8 @@ Alias:
 
 Requests that **the other player teleport to you**.
 
+A player cannot create a new `/tpahere` while CombatLogX reports them in combat. If that player enters combat while one or more of their `/tpahere` requests are still pending, those pending requests are immediately removed and each requested player is told that they can no longer teleport to the sender because the sender entered combat. Once `/tpaccept` has already consumed the request and started the teleport warmup, later combat on the anchor does not invalidate that active teleport.
+
 ### Accepting and denying
 
 ```text
@@ -51,7 +53,7 @@ Requests that **the other player teleport to you**.
 
 If no player name is supplied to `/tpaccept` or `/tpadeny`, the command acts on the most recent applicable incoming request.
 
-A player cannot use `/tpaccept` or `/tpyes` while CombatLogX reports that player in combat, unless they have the combat-bypass permission. For a normal `/tpa`, combat is checked when the request is accepted; if the accepting player enters combat afterward while the other player's teleport warmup is already running, that later combat state does not invalidate the accepted request.
+A player cannot use `/tpaccept` or `/tpyes` while CombatLogX reports that player in combat, unless they have the combat-bypass permission. Combat state is checked when the request is accepted; once the request has been accepted and its teleport warmup is running, later combat does not retroactively invalidate that accepted request.
 
 Requests expire after **60 seconds**. A player can have requests involving different people at the same time, but cannot send a duplicate pending request to the same target.
 
