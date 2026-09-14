@@ -23,6 +23,8 @@ teleport.warmup-cancelled-move: "&cTeleport cancelled because you moved."
 teleport.warmup-cancelled-move-other: "&e{player}'s teleport to you was cancelled because they moved."
 teleport.warmup-cancelled-damage: "&cTeleport cancelled because you took damage."
 teleport.warmup-cancelled-damage-other: "&e{player}'s teleport to you was cancelled because they took damage."
+teleport.warmup-cancelled-combat: "&cTeleport cancelled because you entered combat."
+teleport.warmup-cancelled-combat-other: "&e{player}'s teleport to you was cancelled because they entered combat."
 teleport.warmup-cancelled-disconnect: "&cTeleport cancelled because the other player disconnected."
 teleport.warmup-cancelled-disconnect-other: "&e{player}'s teleport was cancelled because the other player disconnected."
 
@@ -68,7 +70,7 @@ ignore.toggle-on: "&eYou will now &cignore &eteleport requests from &6{target}&e
 ignore.toggle-off: "&eYou will now &areceive &ateleport requests from &6{target}&e."
 ignore.list-header: "&6You are ignoring teleport requests from:"
 ignore.list-entry: "&7- &e{player}"
-ignore.list-empty: "&7You are not ignoring any teleport requests."
+ignore.list-empty: "&7You are not ignoring any pending teleport requests."
 
 spawn.warmup-start: "&eTeleporting to spawn in &6{seconds}s&e. Don't move."
 spawn.teleported: "&aTeleported to spawn."
