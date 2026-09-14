@@ -1,0 +1,16 @@
+schema_version: 1
+plugin:
+  id: enthusia-teleport
+  name: EnthusiaTeleport
+  main_class: org.enthusia.teleport.EnthusiaTeleportPlugin
+artifact:
+  name: EnthusiaTeleport
+  jar_path: target/EnthusiaTeleport-1.2.8.jar
+profiles:
+  - dependencies
+configs: []
+databases: []
+dependencies:
+  - id: combatlogx
+    kind: hard
+actions: []
