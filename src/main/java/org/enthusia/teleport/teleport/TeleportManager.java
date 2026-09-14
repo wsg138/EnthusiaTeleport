@@ -21,6 +21,7 @@ import org.enthusia.teleport.api.CancelReason;
 import org.enthusia.teleport.api.TeleportApi;
 import org.enthusia.teleport.back.BackManager;
 import org.enthusia.teleport.combat.CombatTagManager;
+import org.enthusia.teleport.combat.CombatTeleportPolicy;
 import org.enthusia.teleport.config.PluginConfig;
 import org.enthusia.teleport.request.TeleportRequestManager;
 import org.enthusia.teleport.util.Messages;
@@ -333,14 +334,27 @@ public final class TeleportManager implements TeleportApi, Listener {
         if (player == null) {
             return true;
         }
-        CombatTagManager combat = plugin.getCombatManager();
-        if (combat != null && combat.isInCombat(player) && !player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+        if (isCombatBlocked(player)) {
             messages.send(player, "teleport.combat-blocked");
             return true;
         }
         boolean bypassAll = hasBypassTeleport(player);
         boolean bypassCooldown = bypassAll || flags.bypassCooldown;
         return !bypassCooldown && checkAndNotifyCooldown(player);
+    }
+
+    private boolean isCombatBlocked(Player player) {
+        if (player == null) {
+            return false;
+        }
+        CombatTagManager combat = plugin.getCombatManager();
+        if (combat == null) {
+            return !player.hasPermission(BYPASS_COMBAT_PERMISSION);
+        }
+        return CombatTeleportPolicy.shouldBlock(
+                combat.isInCombat(player),
+                player.hasPermission(BYPASS_COMBAT_PERMISSION)
+        );
     }
 
     private void scheduleWarmup(Player player,
@@ -360,10 +374,32 @@ public final class TeleportManager implements TeleportApi, Listener {
         BukkitTask task = new BukkitRunnable() {
             @Override
             public void run() {
-                ActiveTeleport active = activeTeleports.remove(player.getUniqueId());
+                UUID playerId = player.getUniqueId();
+                ActiveTeleport active = activeTeleports.get(playerId);
+                if (active == null) {
+                    return;
+                }
+
+                // The CombatLogX tag event normally cancels these immediately. Recheck
+                // authoritative state at completion as a fail-closed backstop so a
+                // future event-registration/API problem cannot become a combat escape.
+                if (isCombatBlocked(player)) {
+                    cancelTeleport(playerId, CancelReason.COMBAT);
+                    return;
+                }
+                if (active.cancelOnAnchorCombat
+                        && active.anchor != null
+                        && active.anchor.isOnline()
+                        && isCombatBlocked(active.anchor)) {
+                    cancelTeleport(playerId, CancelReason.ANCHOR_COMBAT);
+                    return;
+                }
+
+                if (!activeTeleports.remove(playerId, active)) {
+                    return;
+                }
                 Location liveTarget = targetSupplier.get();
-                Runnable callback = active == null ? null : active.onSuccess;
-                completeTeleport(player, liveTarget, useSafeSearch, anchor, !bypassCooldown, flags.recordBack, callback);
+                completeTeleport(player, liveTarget, useSafeSearch, anchor, !bypassCooldown, flags.recordBack, active.onSuccess);
             }
         }.runTaskLater(plugin, (long) Math.ceil(warmup * TICKS_PER_SECOND));
 
