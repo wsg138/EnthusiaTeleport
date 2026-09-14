@@ -1,9 +1,12 @@
 package org.enthusia.teleport.command;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.*;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.combat.CombatTeleportPolicy;
 import org.enthusia.teleport.ignore.IgnoreManager;
 import org.enthusia.teleport.request.TeleportRequestManager;
 import org.enthusia.teleport.request.TeleportRequestType;
@@ -42,9 +45,9 @@ public class TpaCommand implements CommandExecutor {
 
         // A /tpahere would invite another player into the sender's current location.
         // Do not create one while CombatLogX already considers the sender in combat.
-        if (here
-                && plugin.getCombatManager().isInCombat(player)
-                && !player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+        if (here && CombatTeleportPolicy.shouldBlock(
+                plugin.getCombatManager().isInCombat(player),
+                player.hasPermission(BYPASS_COMBAT_PERMISSION))) {
             msg.send(player, "teleport.combat-blocked");
             return true;
         }
