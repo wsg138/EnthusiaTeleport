@@ -74,13 +74,20 @@ public final class TeleportManager implements TeleportApi, Listener {
         private final BukkitTask task;
         private final Player anchor;
         private final Runnable onSuccess;
+        private final boolean cancelOnAnchorCombat;
 
-        private ActiveTeleport(UUID playerId, Location origin, BukkitTask task, Player anchor, Runnable onSuccess) {
+        private ActiveTeleport(UUID playerId,
+                               Location origin,
+                               BukkitTask task,
+                               Player anchor,
+                               Runnable onSuccess,
+                               boolean cancelOnAnchorCombat) {
             this.playerId = playerId;
             this.origin = origin;
             this.task = task;
             this.anchor = anchor;
             this.onSuccess = onSuccess;
+            this.cancelOnAnchorCombat = cancelOnAnchorCombat;
         }
     }
 
@@ -148,6 +155,34 @@ public final class TeleportManager implements TeleportApi, Listener {
         List<UUID> players = new ArrayList<>(activeTeleports.keySet());
         for (UUID playerId : players) {
             cancelTeleport(playerId, reason);
+        }
+    }
+
+    /**
+     * Applies combat-entry policy to active warmups. A player entering combat always
+     * loses their own warmup. Teleports anchored to that player are cancelled only
+     * when they were created from an accepted /tpahere; an accepted normal /tpa is
+     * intentionally allowed to finish when its accepting anchor enters combat.
+     */
+    public void cancelForCombatEntry(Player combatPlayer) {
+        if (combatPlayer == null) {
+            return;
+        }
+
+        UUID combatPlayerId = combatPlayer.getUniqueId();
+        cancelTeleport(combatPlayerId, CancelReason.COMBAT);
+
+        List<UUID> anchorSensitiveTeleports = new ArrayList<>();
+        for (Map.Entry<UUID, ActiveTeleport> entry : activeTeleports.entrySet()) {
+            ActiveTeleport active = entry.getValue();
+            if (active.cancelOnAnchorCombat
+                    && active.anchor != null
+                    && combatPlayerId.equals(active.anchor.getUniqueId())) {
+                anchorSensitiveTeleports.add(entry.getKey());
+            }
+        }
+        for (UUID teleporterId : anchorSensitiveTeleports) {
+            cancelTeleport(teleporterId, CancelReason.ANCHOR_COMBAT);
         }
     }
 
@@ -245,7 +280,8 @@ public final class TeleportManager implements TeleportApi, Listener {
                                           boolean useSafeSearch,
                                           String warmupKey,
                                           Runnable onSuccess,
-                                          TeleportFlags flags) {
+                                          TeleportFlags flags,
+                                          boolean cancelOnAnchorCombat) {
         startTeleport(
                 player,
                 () -> anchor != null && anchor.isOnline() ? anchor.getLocation() : null,
@@ -253,7 +289,8 @@ public final class TeleportManager implements TeleportApi, Listener {
                 anchor,
                 warmupKey,
                 onSuccess,
-                flags
+                flags,
+                cancelOnAnchorCombat
         );
     }
 
@@ -264,6 +301,17 @@ public final class TeleportManager implements TeleportApi, Listener {
                                String warmupKey,
                                Runnable onSuccess,
                                TeleportFlags flags) {
+        startTeleport(player, targetSupplier, useSafeSearch, anchor, warmupKey, onSuccess, flags, false);
+    }
+
+    private void startTeleport(Player player,
+                               Supplier<Location> targetSupplier,
+                               boolean useSafeSearch,
+                               Player anchor,
+                               String warmupKey,
+                               Runnable onSuccess,
+                               TeleportFlags flags,
+                               boolean cancelOnAnchorCombat) {
         if (rejectTeleportStart(player, flags)) {
             return;
         }
@@ -277,7 +325,8 @@ public final class TeleportManager implements TeleportApi, Listener {
             return;
         }
 
-        scheduleWarmup(player, targetSupplier, useSafeSearch, anchor, warmupKey, onSuccess, flags, bypassCooldown, warmup);
+        scheduleWarmup(player, targetSupplier, useSafeSearch, anchor, warmupKey, onSuccess, flags,
+                bypassCooldown, warmup, cancelOnAnchorCombat);
     }
 
     private boolean rejectTeleportStart(Player player, TeleportFlags flags) {
@@ -302,7 +351,8 @@ public final class TeleportManager implements TeleportApi, Listener {
                                 Runnable onSuccess,
                                 TeleportFlags flags,
                                 boolean bypassCooldown,
-                                double warmup) {
+                                double warmup,
+                                boolean cancelOnAnchorCombat) {
         cancelTeleport(player.getUniqueId(), null);
         messages.send(player, warmupKey, Map.of("seconds", String.format(java.util.Locale.US, "%.1f", warmup)));
 
@@ -317,7 +367,8 @@ public final class TeleportManager implements TeleportApi, Listener {
             }
         }.runTaskLater(plugin, (long) Math.ceil(warmup * TICKS_PER_SECOND));
 
-        activeTeleports.put(player.getUniqueId(), new ActiveTeleport(player.getUniqueId(), origin, task, anchor, onSuccess));
+        activeTeleports.put(player.getUniqueId(), new ActiveTeleport(
+                player.getUniqueId(), origin, task, anchor, onSuccess, cancelOnAnchorCombat));
     }
 
     private void completeTeleport(Player player,
@@ -363,6 +414,15 @@ public final class TeleportManager implements TeleportApi, Listener {
             case COMBAT -> {
                 messages.send(player, "teleport.warmup-cancelled-combat");
                 notifyAnchor(active, "teleport.warmup-cancelled-combat-other", player);
+            }
+            case ANCHOR_COMBAT -> {
+                if (active.anchor != null) {
+                    messages.send(player, "teleport.warmup-cancelled-anchor-combat",
+                            Map.of("player", active.anchor.getName()));
+                    notifyAnchor(active, "teleport.warmup-cancelled-anchor-combat-other", player);
+                } else {
+                    messages.send(player, "teleport.warmup-cancelled-combat");
+                }
             }
             case DISCONNECT -> {
                 messages.send(player, "teleport.warmup-cancelled-disconnect");
