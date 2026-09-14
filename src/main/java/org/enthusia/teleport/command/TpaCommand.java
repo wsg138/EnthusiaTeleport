@@ -15,6 +15,7 @@ public class TpaCommand implements CommandExecutor {
     private static final String TARGET_PLACEHOLDER = "target";
     private static final String SECONDS_PLACEHOLDER = "seconds";
     private static final String SENDER_PLACEHOLDER = "sender";
+    private static final String BYPASS_COMBAT_PERMISSION = "enthusia.teleport.bypass-combat";
     private static final int REQUIRED_ARGS = 1;
 
     private final EnthusiaTeleportPlugin plugin;
@@ -36,6 +37,15 @@ public class TpaCommand implements CommandExecutor {
 
         if (args.length < REQUIRED_ARGS) {
             player.sendMessage("§cUsage: /" + label + " <player>");
+            return true;
+        }
+
+        // A /tpahere would invite another player into the sender's current location.
+        // Do not create one while CombatLogX already considers the sender in combat.
+        if (here
+                && plugin.getCombatManager().isInCombat(player)
+                && !player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+            msg.send(player, "teleport.combat-blocked");
             return true;
         }
 
