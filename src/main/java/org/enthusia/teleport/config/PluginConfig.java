@@ -7,7 +7,6 @@ import java.util.Set;
 public record PluginConfig(
         int configVersion,
         TeleportSettings teleport,
-        CombatSettings combat,
         HomeSettings homes,
         SpawnSettings spawn,
         RtpSettings rtp,
@@ -26,12 +25,6 @@ public record PluginConfig(
             int safeSearchRadius,
             int backMax,
             Set<String> blockedTargetWorlds
-    ) {
-    }
-
-    public record CombatSettings(
-            boolean enabled,
-            int tagSeconds
     ) {
     }
 
