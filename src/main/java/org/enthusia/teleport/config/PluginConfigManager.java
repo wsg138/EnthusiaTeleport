@@ -191,7 +191,7 @@ public class PluginConfigManager {
             }
             return YamlConfiguration.loadConfiguration(new InputStreamReader(stream, StandardCharsets.UTF_8));
         } catch (IOException exception) {
-            plugin.getLogger().warning("Failed to read default " + resourceName + " for migration: " + exception.getMessage());
+            plugin.getLogger().warning("Failed to read default " + resourceName + ": " + exception.getMessage());
             return null;
         }
     }
