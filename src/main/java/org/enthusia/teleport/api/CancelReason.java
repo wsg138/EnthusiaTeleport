@@ -7,6 +7,7 @@ public enum CancelReason {
     MOVE,
     DAMAGE,
     COMBAT,
+    ANCHOR_COMBAT,
     DISCONNECT,
     RELOAD,
     DISABLE
