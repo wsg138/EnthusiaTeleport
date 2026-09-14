@@ -22,6 +22,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.api.CancelReason;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -34,10 +35,11 @@ import java.util.UUID;
  * CombatLogX is the sole authority for combat state. This class intentionally does
  * not keep its own timer or extend combat for pearls; CombatLogX owns those rules.
  * The listener code that remains here is NewPlayerProtection compatibility plus
- * the request-policy reaction to CombatLogX's own PlayerTagEvent.
+ * the request/warmup policy reaction to CombatLogX's own PlayerTagEvent.
  */
 public class CombatTagManager implements Listener {
 
+    private static final String BYPASS_COMBAT_PERMISSION = "enthusia.teleport.bypass-combat";
     private static final String COMBATLOGX_TAG_EVENT =
             "com.github.sirblobman.combatlogx.api.event.PlayerTagEvent";
 
@@ -118,9 +120,22 @@ public class CombatTagManager implements Listener {
     private void handleCombatLogXTag(Event event, Method getPlayerMethod) {
         try {
             Object taggedPlayer = getPlayerMethod.invoke(event);
-            if (taggedPlayer instanceof Player player) {
-                plugin.getRequestManager().cancelOutgoingTpahereForCombat(player);
+            if (!(taggedPlayer instanceof Player player)) {
+                return;
             }
+            if (player.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+                return;
+            }
+
+            // Pending /tpahere invitations from this player are no longer safe.
+            plugin.getRequestManager().cancelOutgoingTpahereForCombat(player);
+
+            // If the tagged player is themselves in a teleport warmup, cancel that
+            // warmup so dealing damage cannot be used to escape combat. We do not
+            // cancel teleports merely anchored to this player; this preserves the
+            // requested behavior where an already-accepted /tpa may still arrive
+            // after the accepting anchor enters combat.
+            plugin.getTeleportManager().cancelTeleport(player.getUniqueId(), CancelReason.COMBAT);
         } catch (ReflectiveOperationException ex) {
             plugin.getLogger().severe("[EnthusiaTeleport] Failed to process CombatLogX PlayerTagEvent: " + ex.getMessage());
         }
