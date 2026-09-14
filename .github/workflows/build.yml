@@ -26,6 +26,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          assert_contains() {
+            local needle="$1"
+            local file="$2"
+            local description="$3"
+            if ! grep -Fq "$needle" "$file"; then
+              echo "CombatLogX contract check failed: ${description}" >&2
+              return 1
+            fi
+          }
+
           verify_ref() {
             local ref="$1"
             local base="https://raw.githubusercontent.com/SirBlobman/CombatLogX/${ref}"
@@ -48,12 +59,16 @@ jobs:
               "${base}/plugin/gradle.properties" \
               -o "${dir}/plugin-gradle.properties"
 
-            grep -Fq 'boolean isInCombat(@NotNull Player player);' "${dir}/ICombatManager.java"
-            grep -Fq 'public final class PlayerTagEvent extends CustomPlayerEvent' "${dir}/PlayerTagEvent.java"
-            grep -Fq 'public abstract class CustomPlayerEvent extends PlayerEvent' "${dir}/CustomPlayerEvent.java"
-            grep -Fq 'public @NotNull ICombatManager getCombatManager()' "${dir}/CombatPlugin.java"
-            grep -Fq 'bukkit.plugin.name=CombatLogX' "${dir}/plugin-gradle.properties"
-            grep -Fq 'bukkit.plugin.main=com.github.sirblobman.combatlogx.CombatPlugin' "${dir}/plugin-gradle.properties"
+            assert_contains 'boolean isInCombat(@NotNull Player player);' \
+              "${dir}/ICombatManager.java" "isInCombat(Player) is missing at ${ref}"
+            assert_contains 'public final class PlayerTagEvent extends CustomPlayerEvent' \
+              "${dir}/PlayerTagEvent.java" "PlayerTagEvent moved or changed at ${ref}"
+            assert_contains 'public abstract class CustomPlayerEvent extends PlayerEvent' \
+              "${dir}/CustomPlayerEvent.java" "PlayerTagEvent no longer inherits Bukkit PlayerEvent at ${ref}"
+            assert_contains 'public @NotNull ICombatManager getCombatManager()' \
+              "${dir}/CombatPlugin.java" "getCombatManager() is missing at ${ref}"
+            assert_contains 'bukkit.plugin.name=CombatLogX' \
+              "${dir}/plugin-gradle.properties" "plugin name CombatLogX changed at ${ref}"
           }
 
           # 11.6 release-line source immediately before the 11.6.0.0.1286 bundle.
