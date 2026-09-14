@@ -1,7 +1,9 @@
 package org.enthusia.teleport.command;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.*;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 import org.enthusia.teleport.request.TeleportRequest;
@@ -13,6 +15,8 @@ import org.enthusia.teleport.util.Messages;
 import java.util.Map;
 
 public class TpAcceptCommand implements CommandExecutor {
+
+    private static final String BYPASS_COMBAT_PERMISSION = "enthusia.teleport.bypass-combat";
 
     private final EnthusiaTeleportPlugin plugin;
 
@@ -26,6 +30,15 @@ public class TpAcceptCommand implements CommandExecutor {
 
         if (!(sender instanceof Player target)) {
             msg.send(sender, "generic.no-console");
+            return true;
+        }
+
+        // /tpaccept is gated by the accepter's combat state at acceptance time.
+        // Once accepted, the anchor entering combat later does not invalidate the
+        // already-started teleport for the other player.
+        if (plugin.getCombatManager().isInCombat(target)
+                && !target.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+            msg.send(target, "teleport.combat-blocked");
             return true;
         }
 
