@@ -18,7 +18,7 @@ During that warmup:
 
 The production cooldown after a completed teleport is currently **0 seconds**, so there is no additional normal post-teleport cooldown.
 
-Teleport commands are blocked while the player is in PvP combat. The current internal combat window is **30 seconds**, with CombatLogX/NewPlayerProtection integrations used where applicable.
+Teleport commands are blocked while the player is in PvP combat according to **CombatLogX**. CombatLogX is the authoritative combat source, including any timer extensions such as pearl-related extensions; EnthusiaTeleport does not maintain a second combat timer.
 
 Teleport destinations are also checked against blocked target worlds. The current configuration prevents this teleport system from sending ordinary players into the `surfevents` world.
 
@@ -50,6 +50,8 @@ Requests that **the other player teleport to you**.
 ```
 
 If no player name is supplied to `/tpaccept` or `/tpadeny`, the command acts on the most recent applicable incoming request.
+
+A player cannot use `/tpaccept` or `/tpyes` while CombatLogX reports that player in combat, unless they have the combat-bypass permission. For a normal `/tpa`, combat is checked when the request is accepted; if the accepting player enters combat afterward while the other player's teleport warmup is already running, that later combat state does not invalidate the accepted request.
 
 Requests expire after **60 seconds**. A player can have requests involving different people at the same time, but cannot send a duplicate pending request to the same target.
 
@@ -205,7 +207,7 @@ The first-join numbering/welcome broadcast used elsewhere on Enthusia is handled
 /bed list
 /bed manage
 /bed delete <name>
-/bed rename <old_name> <new_name>
+/bed rename <old> <new>
 /spawn
 ```
 
@@ -240,10 +242,8 @@ Staff can inspect/manage other players' homes, inventories, ender chests, offlin
 
 ## Integrations
 
-Optional integrations include:
-
-- **CombatLogX** for authoritative combat-state checks;
-- **NewPlayerProtection** for compatibility with protection/combat state;
+- **CombatLogX** is required and is the authoritative source for combat-state checks.
+- **NewPlayerProtection** is an optional compatibility integration for player-protection state.
 - other Enthusia plugins can use the exposed `TeleportApi` to request/cancel teleports and apply warmup/cooldown modifiers safely.
 
 Private messages such as `/msg` are intentionally **not** implemented here; RoseChat owns messaging on the current SMP.
