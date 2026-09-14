@@ -6,6 +6,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
+import org.enthusia.teleport.combat.CombatTeleportPolicy;
 import org.enthusia.teleport.request.TeleportRequest;
 import org.enthusia.teleport.request.TeleportRequestManager;
 import org.enthusia.teleport.request.TeleportRequestType;
@@ -116,14 +117,16 @@ public class TpAcceptCommand implements CommandExecutor {
                 "teleport.warmup-start",
                 null,
                 TeleportManager.TeleportFlags.standard(),
-                req.getType() == TeleportRequestType.TPA_HERE
+                CombatTeleportPolicy.cancelOnAnchorCombat(req.getType())
         );
 
         return true;
     }
 
     private boolean isCombatBlocked(Player player) {
-        return plugin.getCombatManager().isInCombat(player)
-                && !player.hasPermission(BYPASS_COMBAT_PERMISSION);
+        return CombatTeleportPolicy.shouldBlock(
+                plugin.getCombatManager().isInCombat(player),
+                player.hasPermission(BYPASS_COMBAT_PERMISSION)
+        );
     }
 }
