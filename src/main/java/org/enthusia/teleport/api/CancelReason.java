@@ -6,6 +6,7 @@ public enum CancelReason {
     DUEL_SPECTATE,
     MOVE,
     DAMAGE,
+    COMBAT,
     DISCONNECT,
     RELOAD,
     DISABLE
