@@ -14,6 +14,7 @@ During that warmup:
 
 - moving more than **0.35 blocks** from the starting position cancels the teleport;
 - taking real damage cancels the teleport;
+- entering CombatLogX combat cancels the warmup for the player who is actually teleporting, unless they have the combat-bypass permission;
 - the player receives a warmup/cancellation message explaining what happened.
 
 The production cooldown after a completed teleport is currently **0 seconds**, so there is no additional normal post-teleport cooldown.
@@ -36,11 +37,15 @@ Alias:
 /tpask <player>
 ```
 
+A normal `/tpa` request may remain pending while its sender is in combat, but it cannot be accepted into an active teleport until that sender is no longer combat-blocked. After it has been accepted, the sender is the player actually teleporting, so entering combat during their warmup cancels the teleport. If the accepting target/anchor enters combat after acceptance instead, the already-started `/tpa` remains valid as intended.
+
 ### `/tpahere <player>`
 
 Requests that **the other player teleport to you**.
 
-A player cannot create a new `/tpahere` while CombatLogX reports them in combat. If that player enters combat while one or more of their `/tpahere` requests are still pending, those pending requests are immediately removed and each requested player is told that they can no longer teleport to the sender because the sender entered combat. Once `/tpaccept` has already consumed the request and started the teleport warmup, later combat on the anchor does not invalidate that active teleport.
+A player cannot create a new `/tpahere` while CombatLogX reports them in combat. If that player enters combat while one or more of their `/tpahere` requests are still pending, those pending requests are immediately removed and each requested player is told that they can no longer teleport to the sender because the sender entered combat.
+
+If `/tpahere` has already been accepted, the requested player is the one actually teleporting. Their warmup is cancelled if either they enter combat themselves or the `/tpahere` sender/anchor enters combat before the teleport finishes. This prevents an accepted `/tpahere` from becoming a delayed invitation into an active fight.
 
 ### Accepting and denying
 
@@ -53,7 +58,7 @@ A player cannot create a new `/tpahere` while CombatLogX reports them in combat.
 
 If no player name is supplied to `/tpaccept` or `/tpadeny`, the command acts on the most recent applicable incoming request.
 
-A player cannot use `/tpaccept` or `/tpyes` while CombatLogX reports that player in combat, unless they have the combat-bypass permission. Combat state is checked when the request is accepted; once the request has been accepted and its teleport warmup is running, later combat does not retroactively invalidate that accepted request.
+A player cannot use `/tpaccept` or `/tpyes` while CombatLogX reports that player in combat, unless they have the combat-bypass permission. The actual player who would teleport must also be out of combat (or have the bypass) before the request is consumed. Combat behavior after acceptance follows the request-type rules above.
 
 Requests expire after **60 seconds**. A player can have requests involving different people at the same time, but cannot send a duplicate pending request to the same target.
 
