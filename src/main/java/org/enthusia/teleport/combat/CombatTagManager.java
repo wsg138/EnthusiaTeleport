@@ -13,14 +13,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Snowball;
 import org.bukkit.entity.TNTPrimed;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.Plugin;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,13 +33,18 @@ import java.util.UUID;
  *
  * CombatLogX is the sole authority for combat state. This class intentionally does
  * not keep its own timer or extend combat for pearls; CombatLogX owns those rules.
- * The listener code that remains here is only NewPlayerProtection compatibility.
+ * The listener code that remains here is NewPlayerProtection compatibility plus
+ * the request-policy reaction to CombatLogX's own PlayerTagEvent.
  */
 public class CombatTagManager implements Listener {
+
+    private static final String COMBATLOGX_TAG_EVENT =
+            "com.github.sirblobman.combatlogx.api.event.PlayerTagEvent";
 
     private final EnthusiaTeleportPlugin plugin;
     private final CombatLogXHook combatLogXHook;
     private final NPPBridge nppBridge;
+    private boolean combatTagListenerRegistered;
 
     // Crystal entity UUID -> player UUID who last punched/owns it. Used only so
     // NewPlayerProtection can attribute crystal damage to the attacking player.
@@ -46,11 +54,13 @@ public class CombatTagManager implements Listener {
         this.plugin = plugin;
         this.combatLogXHook = new CombatLogXHook(plugin);
         this.nppBridge = new NPPBridge();
+        registerCombatLogXTagListener();
     }
 
     public void reload() {
         this.combatLogXHook.tryHook();
         this.nppBridge.tryHook();
+        registerCombatLogXTagListener();
     }
 
     /**
@@ -58,6 +68,62 @@ public class CombatTagManager implements Listener {
      */
     public boolean isInCombat(Player player) {
         return combatLogXHook.isInCombat(player);
+    }
+
+    /**
+     * Listen directly to CombatLogX's PlayerTagEvent without maintaining our own
+     * combat timer. Reflection keeps the integration version-tolerant while the
+     * hard plugin dependency guarantees CombatLogX loads first.
+     */
+    private void registerCombatLogXTagListener() {
+        if (combatTagListenerRegistered) {
+            return;
+        }
+
+        Plugin combatLogX = Bukkit.getPluginManager().getPlugin("CombatLogX");
+        if (combatLogX == null || !combatLogX.isEnabled()) {
+            plugin.getLogger().severe("[EnthusiaTeleport] Cannot register CombatLogX PlayerTagEvent listener because CombatLogX is not enabled.");
+            return;
+        }
+
+        try {
+            Class<?> rawEventClass = Class.forName(
+                    COMBATLOGX_TAG_EVENT,
+                    false,
+                    combatLogX.getClass().getClassLoader()
+            );
+            if (!Event.class.isAssignableFrom(rawEventClass)) {
+                plugin.getLogger().severe("[EnthusiaTeleport] CombatLogX PlayerTagEvent is not a Bukkit event.");
+                return;
+            }
+
+            Class<? extends Event> eventClass = rawEventClass.asSubclass(Event.class);
+            Method getPlayerMethod = rawEventClass.getMethod("getPlayer");
+
+            Bukkit.getPluginManager().registerEvent(
+                    eventClass,
+                    this,
+                    EventPriority.MONITOR,
+                    (listener, event) -> handleCombatLogXTag(event, getPlayerMethod),
+                    plugin,
+                    true
+            );
+            combatTagListenerRegistered = true;
+            plugin.getLogger().info("[EnthusiaTeleport] Listening for CombatLogX combat-entry events.");
+        } catch (ReflectiveOperationException ex) {
+            plugin.getLogger().severe("[EnthusiaTeleport] Failed to register CombatLogX PlayerTagEvent listener: " + ex.getMessage());
+        }
+    }
+
+    private void handleCombatLogXTag(Event event, Method getPlayerMethod) {
+        try {
+            Object taggedPlayer = getPlayerMethod.invoke(event);
+            if (taggedPlayer instanceof Player player) {
+                plugin.getRequestManager().cancelOutgoingTpahereForCombat(player);
+            }
+        } catch (ReflectiveOperationException ex) {
+            plugin.getLogger().severe("[EnthusiaTeleport] Failed to process CombatLogX PlayerTagEvent: " + ex.getMessage());
+        }
     }
 
     // ─── Damager resolution for NewPlayerProtection ─────────────────────────
