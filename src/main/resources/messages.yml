@@ -70,7 +70,7 @@ ignore.toggle-on: "&eYou will now &cignore &eteleport requests from &6{target}&e
 ignore.toggle-off: "&eYou will now &areceive &ateleport requests from &6{target}&e."
 ignore.list-header: "&6You are ignoring teleport requests from:"
 ignore.list-entry: "&7- &e{player}"
-ignore.list-empty: "&7You are not ignoring any pending teleport requests."
+ignore.list-empty: "&7You are not ignoring any teleport requests."
 
 spawn.warmup-start: "&eTeleporting to spawn in &6{seconds}s&e. Don't move."
 spawn.teleported: "&aTeleported to spawn."
