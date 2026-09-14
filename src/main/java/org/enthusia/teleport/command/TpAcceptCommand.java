@@ -70,6 +70,19 @@ public class TpAcceptCommand implements CommandExecutor {
             return true;
         }
 
+        // A pending /tpahere becomes invalid as soon as its sender enters combat.
+        // This is a backstop for the CombatLogX PlayerTagEvent listener; accepted
+        // requests are removed before warmup starts and are intentionally not checked
+        // again if the anchor enters combat later.
+        if (req.getType() == TeleportRequestType.TPA_HERE
+                && plugin.getCombatManager().isInCombat(senderPlayer)
+                && !senderPlayer.hasPermission(BYPASS_COMBAT_PERMISSION)) {
+            reqMgr.removeRequest(req);
+            msg.send(target, "teleport.request.cancelled-tpahere-combat",
+                    Map.of("player", senderPlayer.getName()));
+            return true;
+        }
+
         TeleportManager tpMgr = plugin.getTeleportManager();
 
         Player teleporter;
