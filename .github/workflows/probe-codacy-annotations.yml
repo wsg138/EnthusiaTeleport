@@ -1,0 +1,56 @@
+name: Probe Codacy annotations
+
+on:
+  push:
+    branches:
+      - fix/combatlogx-authoritative-combat
+
+permissions:
+  checks: read
+  contents: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read Codacy annotations and post them to PR 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+          check_id=""
+
+          for _ in $(seq 1 60); do
+            checks="$(curl --fail --silent --show-error "${auth[@]}" "${api}/commits/${GITHUB_SHA}/check-runs?per_page=100")"
+            check_id="$(jq -r '[.check_runs[] | select(.name == "Codacy Static Code Analysis")][0].id // empty' <<<"${checks}")"
+            status="$(jq -r '[.check_runs[] | select(.name == "Codacy Static Code Analysis")][0].status // empty' <<<"${checks}")"
+            if [[ -n "${check_id}" && "${status}" == "completed" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ -z "${check_id}" ]]; then
+            echo "Codacy check was not found for ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+          annotations="$(curl --fail --silent --show-error "${auth[@]}" "${api}/check-runs/${check_id}/annotations?per_page=100")"
+          count="$(jq 'length' <<<"${annotations}")"
+          details="$(jq -r '.[] | "- **" + (.annotation_level // "unknown") + "** `" + (.path // "unknown") + ":" + ((.start_line // 0)|tostring) + "` — " + (.title // "") + (if (.message // "") != "" then ": " + .message else "" end) + (if (.raw_details // "") != "" then " — " + .raw_details else "" end)' <<<"${annotations}")"
+
+          body="<!-- codacy-annotation-probe -->
+          Exact Codacy annotations for commit \`${GITHUB_SHA}\` (${count}):
+          ${details}"
+
+          payload="$(jq -n --arg body "${body}" '{body:$body}')"
+          curl --fail --silent --show-error "${auth[@]}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d "${payload}" \
+            "${api}/issues/10/comments" >/dev/null
