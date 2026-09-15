@@ -8,13 +8,12 @@ on:
 permissions:
   checks: read
   contents: read
-  issues: write
 
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Read Codacy annotations and post them to PR 10
+      - name: Read Codacy annotations
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -40,17 +39,14 @@ jobs:
             exit 1
           fi
 
-          annotations="$(curl --fail --silent --show-error "${auth[@]}" "${api}/check-runs/${check_id}/annotations?per_page=100")"
+          # GitHub App workflow tokens receive 403 for annotations created by a
+          # different GitHub App. This repository is public, so read the public
+          # check annotation endpoint without an Authorization header instead.
+          annotations="$(curl --fail --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api}/check-runs/${check_id}/annotations?per_page=100")"
           count="$(jq 'length' <<<"${annotations}")"
-          details="$(jq -r '.[] | "- **" + (.annotation_level // "unknown") + "** `" + (.path // "unknown") + ":" + ((.start_line // 0)|tostring) + "` — " + (.title // "") + (if (.message // "") != "" then ": " + .message else "" end) + (if (.raw_details // "") != "" then " — " + .raw_details else "" end)' <<<"${annotations}")"
 
-          body="<!-- codacy-annotation-probe -->
-          Exact Codacy annotations for commit \`${GITHUB_SHA}\` (${count}):
-          ${details}"
-
-          payload="$(jq -n --arg body "${body}" '{body:$body}')"
-          curl --fail --silent --show-error "${auth[@]}" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d "${payload}" \
-            "${api}/issues/10/comments" >/dev/null
+          echo "Codacy annotations for ${GITHUB_SHA}: ${count}"
+          jq -r '.[] | "ANNOTATION|" + (.annotation_level // "unknown") + "|" + (.path // "unknown") + "|" + ((.start_line // 0)|tostring) + "|" + (.title // "") + "|" + (.message // "") + "|" + (.raw_details // "")' <<<"${annotations}"
