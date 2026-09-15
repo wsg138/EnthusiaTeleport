@@ -61,7 +61,6 @@ public class TpAcceptCommand implements CommandExecutor {
         }
 
         Player senderPlayer = req.getSenderPlayer();
-        Player targetPlayer = req.getTargetPlayer();
         if (senderPlayer == null || !senderPlayer.isOnline()) {
             msg.send(target, "teleport.requester-offline");
             reqMgr.removeRequest(req);
@@ -84,9 +83,9 @@ public class TpAcceptCommand implements CommandExecutor {
 
         if (req.getType() == TeleportRequestType.TPA) {
             teleporter = senderPlayer;
-            anchor = targetPlayer;
+            anchor = target;
         } else {
-            teleporter = targetPlayer;
+            teleporter = target;
             anchor = senderPlayer;
         }
 
