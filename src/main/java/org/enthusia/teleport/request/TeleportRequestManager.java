@@ -19,6 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TeleportRequestManager implements Listener {
 
+    private static final String PLAYER_PLACEHOLDER = "player";
+
     private final EnthusiaTeleportPlugin plugin;
     private final Map<UUID, Map<UUID, TeleportRequest>> outgoing = new ConcurrentHashMap<>();
     private final Map<UUID, Map<UUID, TeleportRequest>> incoming = new ConcurrentHashMap<>();
@@ -145,7 +147,7 @@ public class TeleportRequestManager implements Listener {
             Player target = Bukkit.getPlayer(request.getTarget());
             if (target != null && target.isOnline()) {
                 plugin.getMessages().send(target, "teleport.request.cancelled-tpahere-combat",
-                        Map.of("player", combatPlayer.getName()));
+                        Map.of(PLAYER_PLACEHOLDER, combatPlayer.getName()));
             }
         }
         return cancelled;
@@ -178,7 +180,7 @@ public class TeleportRequestManager implements Listener {
                 if (notifyCounterpart) {
                     Player target = Bukkit.getPlayer(request.getTarget());
                     if (target != null && target.isOnline()) {
-                        plugin.getMessages().send(target, "teleport.request.cancelled-disconnect", Map.of("player", resolveName(playerId)));
+                        plugin.getMessages().send(target, "teleport.request.cancelled-disconnect", Map.of(PLAYER_PLACEHOLDER, resolveName(playerId)));
                     }
                 }
             }
@@ -199,7 +201,7 @@ public class TeleportRequestManager implements Listener {
                 if (notifyCounterpart) {
                     Player sender = Bukkit.getPlayer(request.getSender());
                     if (sender != null && sender.isOnline()) {
-                        plugin.getMessages().send(sender, "teleport.request.cancelled-disconnect", Map.of("player", resolveName(playerId)));
+                        plugin.getMessages().send(sender, "teleport.request.cancelled-disconnect", Map.of(PLAYER_PLACEHOLDER, resolveName(playerId)));
                     }
                 }
             }
@@ -248,7 +250,7 @@ public class TeleportRequestManager implements Listener {
         for (UUID recipientId : List.of(request.getSender(), request.getTarget())) {
             Player recipient = Bukkit.getPlayer(recipientId);
             if (recipient != null && recipient.isOnline()) {
-                plugin.getMessages().send(recipient, "teleport.request.cancelled-external-state", Map.of("player", changedPlayerName));
+                plugin.getMessages().send(recipient, "teleport.request.cancelled-external-state", Map.of(PLAYER_PLACEHOLDER, changedPlayerName));
             }
         }
     }
