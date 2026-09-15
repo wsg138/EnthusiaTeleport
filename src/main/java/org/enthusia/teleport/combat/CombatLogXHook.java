@@ -58,7 +58,7 @@ public class CombatLogXHook {
             this.parameterType = isInCombat.getParameterTypes()[0];
 
             plugin.getLogger().info("[EnthusiaTeleport] Hooked into CombatLogX as the authoritative combat source.");
-        } catch (Exception ex) {
+        } catch (ReflectiveOperationException | SecurityException ex) {
             plugin.getLogger().severe("[EnthusiaTeleport] Failed to hook into CombatLogX: " + ex.getMessage());
         }
     }
@@ -84,7 +84,7 @@ public class CombatLogXHook {
                 return bool;
             }
             warnQueryFailure("CombatLogX returned a non-boolean combat result");
-        } catch (Exception ex) {
+        } catch (ReflectiveOperationException ex) {
             warnQueryFailure("CombatLogX combat query failed: " + ex.getMessage());
         }
 
