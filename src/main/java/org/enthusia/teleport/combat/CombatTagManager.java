@@ -75,8 +75,10 @@ public class CombatTagManager implements Listener {
     /**
      * Listen directly to CombatLogX's PlayerTagEvent without maintaining our own
      * combat timer. Reflection keeps the integration version-tolerant while the
-     * hard plugin dependency guarantees CombatLogX loads first.
+     * hard plugin dependency guarantees CombatLogX loads first. The CombatLogX
+     * plugin class loader is intentional here because Bukkit isolates plugin classes.
      */
+    @SuppressWarnings("PMD.UseProperClassLoader")
     private void registerCombatLogXTagListener() {
         if (combatTagListenerRegistered) {
             return;
