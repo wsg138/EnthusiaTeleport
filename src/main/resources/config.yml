@@ -28,12 +28,6 @@ teleport:
   blocked-target-worlds:
     - surfevents
 
-combat:
-  enabled: true
-
-  # Seconds after dealing or taking player damage that teleports are blocked.
-  tag-seconds: 30
-
 homes:
   default-max: 2
 

@@ -10,8 +10,8 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 
 /**
- * Lightweight, reflection-based hook into CombatLogX.
- * Lets us query the plugin for "is player in combat?" without a compile-time dependency.
+ * Reflection-based hook into CombatLogX.
+ * CombatLogX is the sole authority for whether a player is combat tagged.
  */
 public class CombatLogXHook {
 
@@ -20,6 +20,7 @@ public class CombatLogXHook {
     private Object combatManager;
     private Method isInCombatMethod;
     private Class<?> parameterType;
+    private boolean queryFailureWarned;
 
     public CombatLogXHook(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -30,20 +31,25 @@ public class CombatLogXHook {
         this.combatManager = null;
         this.isInCombatMethod = null;
         this.parameterType = null;
+        this.queryFailureWarned = false;
 
         Plugin combatLogX = Bukkit.getPluginManager().getPlugin("CombatLogX");
         if (combatLogX == null || !combatLogX.isEnabled()) {
+            plugin.getLogger().severe("[EnthusiaTeleport] CombatLogX is required but is not enabled.");
             return;
         }
 
         try {
             Method getCombatManager = combatLogX.getClass().getMethod("getCombatManager");
             Object manager = getCombatManager.invoke(combatLogX);
-            if (manager == null) return;
+            if (manager == null) {
+                plugin.getLogger().severe("[EnthusiaTeleport] CombatLogX returned no combat manager.");
+                return;
+            }
 
             Method isInCombat = findIsInCombatMethod(manager.getClass());
             if (isInCombat == null) {
-                plugin.getLogger().warning("[EnthusiaTeleport] Found CombatLogX but could not find an isInCombat method.");
+                plugin.getLogger().severe("[EnthusiaTeleport] Found CombatLogX but could not find an isInCombat method.");
                 return;
             }
 
@@ -51,9 +57,9 @@ public class CombatLogXHook {
             this.isInCombatMethod = isInCombat;
             this.parameterType = isInCombat.getParameterTypes()[0];
 
-            plugin.getLogger().info("[EnthusiaTeleport] Hooked into CombatLogX for combat checks.");
-        } catch (Exception ex) {
-            plugin.getLogger().warning("[EnthusiaTeleport] Failed to hook into CombatLogX: " + ex.getMessage());
+            plugin.getLogger().info("[EnthusiaTeleport] Hooked into CombatLogX as the authoritative combat source.");
+        } catch (ReflectiveOperationException | SecurityException ex) {
+            plugin.getLogger().severe("[EnthusiaTeleport] Failed to hook into CombatLogX: " + ex.getMessage());
         }
     }
 
@@ -62,17 +68,33 @@ public class CombatLogXHook {
     }
 
     public boolean isInCombat(Player player) {
-        if (!isHooked() || player == null) return false;
+        if (player == null) return false;
+
+        // Fail closed if the required combat integration is unavailable. Silently
+        // allowing teleports here would reintroduce combat-escape behavior.
+        if (!isHooked()) {
+            warnQueryFailure("CombatLogX hook is unavailable");
+            return true;
+        }
+
         try {
             Object arg = buildArgument(player);
             Object result = isInCombatMethod.invoke(combatManager, arg);
             if (result instanceof Boolean bool) {
                 return bool;
             }
-        } catch (Exception ignored) {
-            // fall through to false
+            warnQueryFailure("CombatLogX returned a non-boolean combat result");
+        } catch (ReflectiveOperationException ex) {
+            warnQueryFailure("CombatLogX combat query failed: " + ex.getMessage());
         }
-        return false;
+
+        return true;
+    }
+
+    private void warnQueryFailure(String message) {
+        if (queryFailureWarned) return;
+        queryFailureWarned = true;
+        plugin.getLogger().severe("[EnthusiaTeleport] " + message + "; teleport combat checks will fail closed.");
     }
 
     private Method findIsInCombatMethod(Class<?> managerClass) {

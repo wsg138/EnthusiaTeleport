@@ -57,10 +57,6 @@ public class PluginConfigManager {
                         Math.max(0, config.getInt("teleport.back-max", 10)),
                         parseBlockedWorlds(config)
                 ),
-                new PluginConfig.CombatSettings(
-                        config.getBoolean("combat.enabled", true),
-                        Math.max(0, config.getInt("combat.tag-seconds", 30))
-                ),
                 new PluginConfig.HomeSettings(
                         Math.max(0, config.getInt("homes.default-max", 2)),
                         parseIntMap(config.getConfigurationSection("homes.rank-limits"))

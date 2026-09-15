@@ -4,7 +4,8 @@ version: 1.2.8
 api-version: "1.21"
 author: P2wn
 description: Teleport, home, spawn, and staff utility plugin for Enthusia. Messaging is provided by RoseChat.
-softdepend: [CombatLogX, NewPlayerProtection]
+depend: [CombatLogX]
+softdepend: [NewPlayerProtection]
 
 commands:
   tpa:
