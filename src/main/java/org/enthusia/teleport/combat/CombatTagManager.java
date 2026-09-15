@@ -20,6 +20,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
 
@@ -111,7 +112,7 @@ public class CombatTagManager implements Listener {
             );
             combatTagListenerRegistered = true;
             plugin.getLogger().info("[EnthusiaTeleport] Listening for CombatLogX combat-entry events.");
-        } catch (ReflectiveOperationException ex) {
+        } catch (ReflectiveOperationException | IllegalPluginAccessException | LinkageError | SecurityException ex) {
             plugin.getLogger().severe("[EnthusiaTeleport] Failed to register CombatLogX PlayerTagEvent listener: " + ex.getMessage());
         }
     }
