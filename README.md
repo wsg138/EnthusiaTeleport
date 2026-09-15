@@ -19,7 +19,7 @@ During that warmup:
 
 The production cooldown after a completed teleport is currently **0 seconds**, so there is no additional normal post-teleport cooldown.
 
-Teleport commands are blocked while the player is in PvP combat according to **CombatLogX**. CombatLogX is the authoritative combat source, including any timer extensions such as pearl-related extensions; EnthusiaTeleport does not maintain a second combat timer.
+Teleport execution and direct teleports are blocked while the player who would move is in PvP combat according to **CombatLogX**. A normal `/tpa` request may still be created and remain pending during combat, but it cannot be accepted into an active teleport until the actual teleporter is clear. CombatLogX is the authoritative combat source, including any timer extensions such as pearl-related extensions; EnthusiaTeleport does not maintain a second combat timer.
 
 Teleport destinations are also checked against blocked target worlds. The current configuration prevents this teleport system from sending ordinary players into the `surfevents` world.
 
