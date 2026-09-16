@@ -5,7 +5,7 @@ plugin:
   main_class: org.enthusia.teleport.EnthusiaTeleportPlugin
 artifact:
   name: EnthusiaTeleport
-  jar_path: EnthusiaTeleport-1.2.8.jar
+  jar_path: EnthusiaTeleport-1.2.9.jar
 profiles:
   - dependencies
 configs: []
