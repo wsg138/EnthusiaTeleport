@@ -4,8 +4,8 @@ plugin:
   name: EnthusiaTeleport
   main_class: org.enthusia.teleport.EnthusiaTeleportPlugin
 artifact:
-  name: EnthusiaTeleport
-  jar_path: EnthusiaTeleport-1.2.9.jar
+  name: sentinel-plugin
+  jar_path: plugin.jar
 profiles:
   - dependencies
 configs: []
