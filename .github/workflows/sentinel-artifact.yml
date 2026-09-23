@@ -1,51 +1,60 @@
-name: Sentinel artifact
+name: Sentinel Artifact
 
 on:
+  push:
+    branches:
+      - "**"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
 
+concurrency:
+  group: sentinel-artifact-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   artifact:
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out exact PR head
+      - name: Check out exact source SHA
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
 
       - name: Verify exact checkout
-        env:
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD}"
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
 
       - name: Set up Java 21
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: maven
 
-      - name: Build and test
-        run: mvn -B clean package
-
-      - name: Prepare stable Sentinel artifact
+      - name: Build exact plugin JAR
         shell: bash
         run: |
-          set -euo pipefail
-          JAR=$(find target -maxdepth 1 -type f -name 'EnthusiaTeleport-*.jar' ! -name 'original-*' | head -n 1)
-          test -n "$JAR"
-          rm -rf /tmp/sentinel-plugin
-          mkdir -p /tmp/sentinel-plugin
-          cp "$JAR" /tmp/sentinel-plugin/plugin.jar
+          set -Eeuo pipefail
+          mvn -B clean package
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          JAR="$(find target -maxdepth 1 -type f -name 'EnthusiaTeleport-*.jar' ! -name 'original-*' -print -quit)"
+          test -n "$JAR" && test -f "$JAR"
+          rm -rf sentinel-artifact
+          mkdir -p sentinel-artifact
+          cp -- "$JAR" sentinel-artifact/plugin.jar
 
-      - name: Upload stable Sentinel artifact
+      - name: Upload exact Sentinel artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sentinel-plugin
-          path: /tmp/sentinel-plugin/
+          path: sentinel-artifact/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 3
