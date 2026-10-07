@@ -1,5 +1,10 @@
 # Newcomer RTP pilot requirements
 
+## RET-007 - Bounded activation preparation
+WHEN a newcomer activation plan is prepared THE SYSTEM SHALL retain opt-in source defaults and provide bounded activation/rollback overlays plus pending runtime acceptance without changing production.
+
+Acceptance: only the two observed enable flags change; three total uses, 24 elapsed hours, existing counts/permissions/ranks/regions and spacing remain intact. Overlays are explicitly incomplete and must be merged, never used as replacement configs. Source/loaded-version/config evidence and unresolved artifact/client gates remain distinct. See docs/pilots/newcomer-rtp/README.md.
+
 ## RET-006 - Survival entry and first-home guidance
 WHEN an opted-in onboarding installation receives a first backend join with enabled RTP and permission THE SYSTEM SHALL show a readable Start Survival action executing the existing `/rtp` command.
 

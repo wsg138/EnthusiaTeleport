@@ -1,0 +1,23 @@
+# SELECTED read-only production observations, 2026-10-07 ~11:52 UTC.
+# Evidence snapshot, NOT an installable config or a complete server inventory.
+rtp:
+  enabled: true
+  world: world
+  min-x: -5000
+  max-x: 5000
+  min-z: -5000
+  max-z: 5000
+  max-uses-default: 1
+  excluded-regions: [warzone, spawn, market]
+  spacing:
+    min-distance-from-spawn: 1000
+    min-distance-from-players: 0
+    min-distance-from-recent-rtp: 750
+    recent-rtp-memory-minutes: 60
+  newcomer:
+    enabled: false
+    max-uses: 3
+    window-seconds: 86400
+    boss-bar-enabled: true
+onboarding:
+  enabled: false

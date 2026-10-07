@@ -1,5 +1,14 @@
 # First retention pilot: starting survival
 
+October 7 status: feature source is merged through canonical PR18 at be5cef1;
+production startup loads 1.2.10 but the newcomer and onboarding enable flags
+remain false. Current activation/rollback preparation and pending client gates
+are in [the activation plan](pilots/newcomer-rtp/README.md). Earlier observations
+and incremental feature descriptions below are historical; current production
+has 1000-block spawn and 750-block recent-RTP spacing. PR18 also corrects unlimited
+rank resolution. Do not use the old zero-spacing or unchanged-rank statements
+below as current production/source evidence.
+
 ## Evidence and objective
 
 Read-only Plan inspection on October 5, 2026 found 239 network newcomers in 30 days and 70 in seven days. Hub had 3,099 sessions in the September 28-October 5 comparison, while SMP initially had 36. A subsequent SMP read showed 37, total sessions increasing from 62,643 to 62,644, and increasing playtime and mob kills. Collection is active now; recent historical SMP coverage remains incomplete. The SMP calendar displayed 37 sessions on October 5 and none on October 1-4. This is a collection baseline, not a measured abandonment rate.

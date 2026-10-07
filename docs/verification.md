@@ -1,5 +1,14 @@
 # Newcomer RTP pilot verification
 
+## October 7 activation preparation (RET-007)
+
+- Fresh authoritative main: be5cef1cb1f47c1b1ff6035b72a832f26127ccb3, canonical PR18 merged; external PR16 superseded/closed without merging. Isolated branch codex/newcomer-activation-plan-20261007; existing clean retention-teleport checkout preserved.
+- Read-only production inspection: latest SMP log enabled EnthusiaTeleport 1.2.10 at 00:19:20 server log time. Config read around 11:52 UTC retains one default use, configured region exclusions, 1000-block spawn/750-block recent-RTP spacing, three-use/86400-second newcomer settings, and both enable flags false. Selected snapshot in docs/pilots/newcomer-rtp/observed-settings.yml.
+- Local PyYAML 6.0.3 parse of observed/activation/rollback YAML passed. Flattened observed-to-proposed comparison has exactly rtp.newcomer.enabled false -> true and onboarding.enabled false -> true; three-use/86400-second/boss-bar settings remain the same. Applying rollback restores every key in the selected observed snapshot. This is not a diff of a newly fetched full production config.
+- Source config.yml defaults remain disabled. Plugin descriptor permission names and source prompt/first-success gates inspected against current main. git diff --check passed.
+- Documentation/configuration preparation requires no new behavioral engine or red test; no Java source, runtime resources, version, build ownership or production file changes. Existing canonical validation is historical evidence below, not a newly executed suite. No project-local EARS/state tooling exists.
+- Full artifact provenance, monorepo pin/combined build, hosted preparation checks/review and all isolated Java/Bedrock acceptance rows remain pending. No claim of production activation, successful client journey or improved retention. No production writes, reloads, restarts or uploads.
+
 ## Source and local checks
 
 - Canonical repository: https://github.com/wsg138/EnthusiaTeleport ; default main fetched and inspected at 2dbc81995e96e7e43041a12905ea5f1c4dad4aa3.

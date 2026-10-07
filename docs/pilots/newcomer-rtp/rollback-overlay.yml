@@ -1,0 +1,7 @@
+# REVIEW/STAGING ONLY. Merge these keys; do not replace config.yml.
+# Keep existing RTP counters, homes, region exclusions and all other settings.
+rtp:
+  newcomer:
+    enabled: false
+onboarding:
+  enabled: false

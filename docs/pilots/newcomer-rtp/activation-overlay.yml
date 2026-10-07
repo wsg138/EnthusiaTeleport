@@ -1,0 +1,11 @@
+# REVIEW/STAGING ONLY. Merge these keys into the existing config.yml.
+# This is NOT a complete configuration and must never replace config.yml.
+# Production application/activation requires separate authorization.
+rtp:
+  newcomer:
+    enabled: true
+    max-uses: 3
+    window-seconds: 86400
+    boss-bar-enabled: true
+onboarding:
+  enabled: true

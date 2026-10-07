@@ -1,5 +1,16 @@
 # Retention pilot tasks
 
+## October 7 activation preparation (RET-007)
+
+- [x] SPEC: fetch current canonical main be5cef1; preserve old checkouts; define two-flag configuration scope and separate pending Hub/Tags releases.
+- [x] PROVE: read-only production startup enables Teleport 1.2.10; inspected config leaves newcomer and onboarding disabled. PR18 merged and supersedes closed/unmerged PR16. No artifact hash or live client acceptance inferred.
+- [x] ENGINE/ARCH: no new runtime code needed; explicit partial activation/rollback overlays preserve persistent counters, source defaults and integration boundaries.
+- [x] REFINE: PyYAML 6.0.3 parses all three files; flattened comparison finds only two enable-flag changes; rollback restores the selected observed baseline; source defaults remain disabled; git diff --check passes. No runtime suite rerun for this documentation-only change.
+- [ ] REVIEW: publish preparation PR; inspect exact-head hosted checks/review independently of existing merged feature validation.
+- [ ] RUNTIME/RELEASE: verify artifact provenance/monorepo pin, complete isolated Java/Bedrock acceptance, obtain separate production activation authorization and collect mature cohorts.
+
+Older task entries below describe their historical external PR state; current feature source was merged through canonical PR18. They do not establish deployment authorization or client acceptance.
+
 - [x] SPEC: inspect authoritative main and write RET-001..003. Clean isolated clone of wsg138/EnthusiaTeleport, origin/main 2dbc81995e96e7e43041a12905ea5f1c4dad4aa3, branch codex/newcomer-rtp-pilot. Original dirty Hub checkout preserved.
 - [x] PROVE: new policy tests initially failed test compilation because NewcomerRtpPolicy did not exist (newcomer-red.log). The existing 17 tests passed on Java 23 targeting Java 21 before implementation. This is new-feature absence evidence, not fabricated historical regression evidence.
 - [x] ENGINE: disabled-by-default configurable newcomer allowance uses the existing counter; queued searches recheck the limit after chunk lookup.
