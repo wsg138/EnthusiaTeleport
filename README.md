@@ -260,3 +260,7 @@ Private messages such as `/msg` are intentionally **not** implemented here; Rose
 ```powershell
 mvn -q -DskipTests package
 ```
+
+## Teleport ignore API for other plugins
+
+EnthusiaTeleport registers `org.enthusia.teleport.api.TeleportIgnoreApi` with Bukkit's `ServicesManager`. Other plugins (EnthusiaFriends' Block Everywhere) use it to check and change `/tpignore` between two players without running the command, which toggles. Calls must be on the main thread; the API refuses self-ignores, performs no permission checks or player messages, and saves through the same `ignore.yml` path as `/tpignore`, so changes show in `/tpignore list`. Ignores are stored per server.

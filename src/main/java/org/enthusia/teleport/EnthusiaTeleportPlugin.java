@@ -104,6 +104,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         this.taskCoordinator = new TaskCoordinator(this);
 
         Bukkit.getServicesManager().register(TeleportApi.class, teleportManager, this, ServicePriority.Normal);
+        // Other plugins (EnthusiaFriends Block Everywhere) ignore teleport requests through this service.
+        Bukkit.getServicesManager().register(org.enthusia.teleport.api.TeleportIgnoreApi.class,
+                new org.enthusia.teleport.ignore.IgnoreApiService(ignoreManager, Bukkit::isPrimaryThread), this, ServicePriority.Normal);
 
         registerCommands();
         registerListeners();
@@ -127,6 +130,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
             teleportManager.shutdown();
             Bukkit.getServicesManager().unregister(TeleportApi.class, teleportManager);
         }
+        Bukkit.getServicesManager().unregisterAll(this);
         if (requestManager != null) {
             requestManager.shutdown();
         }
