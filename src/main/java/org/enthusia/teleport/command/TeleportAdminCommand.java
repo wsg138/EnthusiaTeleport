@@ -32,7 +32,12 @@ public class TeleportAdminCommand implements CommandExecutor {
         }
 
         if (args.length == 1 && ignoresEqualCase(args[0], "reload")) {
-            plugin.reloadPlugin();
+            try {
+                plugin.reloadPlugin();
+            } catch (IllegalStateException failure) {
+                sender.sendMessage(msg.color("&c" + failure.getMessage()));
+                return true;
+            }
             msg.send(sender, "admin.reloaded");
             return true;
         }

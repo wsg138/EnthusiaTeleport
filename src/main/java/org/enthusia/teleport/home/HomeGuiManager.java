@@ -36,6 +36,10 @@ public final class HomeGuiManager implements Listener {
     }
 
     public void openHomeGui(Player player) {
+        openHomeGui(player, 0);
+    }
+
+    private void openHomeGui(Player player, int requestedPage) {
         Messages msg = plugin.getMessages();
         HomeManager hm = plugin.getHomeManager();
 
@@ -45,43 +49,62 @@ public final class HomeGuiManager implements Listener {
             return;
         }
 
-        Collection<Home> homes = hm.getHomes(player.getUniqueId());
-        if (homes.isEmpty()) {
+        List<HomeGuiHolder.Destination> destinations = new ArrayList<>();
+        for (Home home : hm.getHomes(player.getUniqueId())) {
+            destinations.add(new HomeGuiHolder.Destination(home.getName(), home.getWorldName(),
+                    home.getX(), home.getY(), home.getZ(), HomeGuiHolder.Kind.HOME));
+        }
+        if (player.hasPermission("enthusia.teleport.bed")) {
+            for (BedHome bed : plugin.getBedHomeManager().getBeds(player.getUniqueId())) {
+                destinations.add(new HomeGuiHolder.Destination(bed.getName(), bed.getWorldName(),
+                        bed.getBedX(), bed.getBedY(), bed.getBedZ(), HomeGuiHolder.Kind.BED));
+            }
+        }
+        plugin.getAnchorHomes().available(player).ifPresent(anchor -> destinations.add(
+                new HomeGuiHolder.Destination("Respawn anchor", anchor.getWorld().getName(),
+                        anchor.getBlockX(), anchor.getBlockY(), anchor.getBlockZ(), HomeGuiHolder.Kind.ANCHOR)));
+        if (destinations.isEmpty()) {
             msg.send(player, "home.no-homes");
             return;
         }
 
-        int size = inventorySizeFor(homes.size());
-
-        String title = msg.color(msg.rawOr("home.gui.title", "&2Your Homes"));
-
-        Inventory inv = Bukkit.createInventory(
-                new HomeGuiHolder(player.getUniqueId()),
-                size,
-                title
-        );
-
-        for (Home home : homes) {
-            ItemStack item = new ItemStack(Material.OAK_DOOR);
+        int capacity = destinations.size() > MAX_GUI_SIZE ? MAX_GUI_SIZE - INVENTORY_ROW_SIZE : MAX_GUI_SIZE;
+        int page = Math.min(requestedPage, (destinations.size() - 1) / capacity);
+        int from = page * capacity;
+        int end = Math.min(from + capacity, destinations.size());
+        var holder = new HomeGuiHolder(player.getUniqueId(), destinations.subList(from, end),
+                page, end < destinations.size());
+        int size = inventorySizeFor(destinations.size());
+        Inventory inv = Bukkit.createInventory(holder, size, msg.color(msg.rawOr("home.gui.title", "&2Your Homes")));
+        for (var destination : holder.visible) {
+            ItemStack item = new ItemStack(switch (destination.kind()) {
+                case HOME -> Material.OAK_DOOR;
+                case BED -> Material.RED_BED;
+                case ANCHOR -> Material.RESPAWN_ANCHOR;
+            });
             ItemMeta meta = item.getItemMeta();
             if (meta != null) {
-                meta.setDisplayName(ChatColor.GREEN + home.getName());
-
-                List<String> lore = new ArrayList<>();
-                lore.add(ChatColor.GRAY + "World: " + ChatColor.YELLOW + home.getWorldName());
-                lore.add(ChatColor.GRAY + String.format("X: %s Y: %s Z: %s",
-                        ChatColor.YELLOW + formatCoordinate(home.getX()),
-                        ChatColor.YELLOW + formatCoordinate(home.getY()),
-                        ChatColor.YELLOW + formatCoordinate(home.getZ())
-                ));
-                lore.add(ChatColor.DARK_GRAY + "Click to teleport.");
-                meta.setLore(lore);
+                String label = destination.kind() == HomeGuiHolder.Kind.BED ? "Bed home: " + destination.name() : destination.name();
+                meta.setDisplayName(ChatColor.GREEN + label);
+                meta.setLore(List.of(ChatColor.GRAY + "World: " + ChatColor.YELLOW + destination.world(),
+                        ChatColor.GRAY + String.format("X: %s Y: %s Z: %s", formatCoordinate(destination.x()),
+                                formatCoordinate(destination.y()), formatCoordinate(destination.z())),
+                        ChatColor.DARK_GRAY + "Click to teleport."));
                 item.setItemMeta(meta);
             }
             inv.addItem(item);
         }
-
+        if (page > 0) inv.setItem(size - INVENTORY_ROW_SIZE, pageArrow("Previous page"));
+        if (holder.hasNext) inv.setItem(size - 1, pageArrow("Next page"));
         player.openInventory(inv);
+    }
+
+    private ItemStack pageArrow(String label) {
+        ItemStack arrow = new ItemStack(Material.ARROW);
+        ItemMeta meta = arrow.getItemMeta();
+        meta.setDisplayName(ChatColor.YELLOW + label);
+        arrow.setItemMeta(meta);
+        return arrow;
     }
 
     public void openAdminHomeGui(Player viewer, OfflinePlayer target, String targetNameFallback) {
@@ -318,7 +341,21 @@ public final class HomeGuiManager implements Listener {
         if (!holder.getOwner().equals(player.getUniqueId())) {
             return;
         }
-        clickedHomeName(event).ifPresent(homeName -> teleportToHome(player, homeName, false));
+        int slot = event.getRawSlot();
+        int size = event.getInventory().getSize();
+        if (slot < 0 || slot >= size) return;
+        if (slot < holder.visible.size()) {
+            var destination = holder.visible.get(slot);
+            switch (destination.kind()) {
+                case BED -> plugin.getBedCommand().teleportNamedBed(player, destination.name());
+                case HOME -> teleportToHome(player, destination.name(), false);
+                case ANCHOR -> plugin.getAnchorHomes().teleport(player);
+            }
+        } else if (holder.page > 0 && slot == size - INVENTORY_ROW_SIZE) {
+            openHomeGui(player, holder.page - 1);
+        } else if (holder.hasNext && slot == size - 1) {
+            openHomeGui(player, holder.page + 1);
+        }
     }
 
     private void handleAdminHomeGuiClick(InventoryClickEvent event, Player player, AdminHomeGuiHolder holder) {

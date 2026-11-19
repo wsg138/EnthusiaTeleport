@@ -1,6 +1,6 @@
 name: EnthusiaTeleport
 main: org.enthusia.teleport.EnthusiaTeleportPlugin
-version: 1.2.10
+version: 1.2.14
 api-version: "1.21"
 author: P2wn
 description: Teleport, home, spawn, and staff utility plugin for Enthusia. Messaging is provided by RoseChat.
@@ -65,7 +65,7 @@ commands:
 
   homes:
     description: Open your home list GUI, or view a player's homes as staff.
-    usage: /homes [player]
+    usage: /homes [destination|bed <name>|player]
     permission: enthusia.teleport.home
 
   delhome:
@@ -80,7 +80,7 @@ commands:
 
   spawn:
     description: Teleport to the server spawn.
-    usage: /spawn
+    usage: /spawn [respawn [bed|spawn]]
     permission: enthusia.teleport.spawn
 
   tppos:

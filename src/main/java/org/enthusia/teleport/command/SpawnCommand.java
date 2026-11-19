@@ -26,6 +26,26 @@ public class SpawnCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length > 0) {
+            if (!args[0].equalsIgnoreCase("respawn") || args.length > 2) {
+                return false;
+            }
+            if (!plugin.getPluginConfigManager().current().spawn().respawnOverrideEnabled()) {
+                msg.send(player, "respawn.disabled");
+                return true;
+            }
+            var manager = plugin.getSpawnManager();
+            if (args.length == 2) {
+                boolean useSpawn = args[1].equalsIgnoreCase("spawn");
+                if (!useSpawn && !args[1].equalsIgnoreCase("bed")) {
+                    return false;
+                }
+                manager.setServerSpawnPreference(player, useSpawn);
+            }
+            msg.send(player, manager.prefersServerSpawn(player) ? "respawn.spawn" : "respawn.bed");
+            return true;
+        }
+
         Location loc = plugin.getSpawnManager().getSpawnLocation();
         if (loc == null) {
             player.sendMessage("§cSpawn is not configured.");

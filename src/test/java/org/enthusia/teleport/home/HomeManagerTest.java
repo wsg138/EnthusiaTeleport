@@ -11,6 +11,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
+import org.bukkit.Bukkit;
+import org.bukkit.scheduler.BukkitScheduler;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.eq;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import java.util.Map;
 import java.util.UUID;
 import org.bukkit.Location;
@@ -146,6 +154,128 @@ class HomeManagerTest {
         assertNull(manager.getHome(PLAYER_ID, null));
         assertNull(manager.getHome(PLAYER_ID, "missing"));
         assertEquals(0, manager.getHomeCount(PLAYER_ID));
+    }
+
+    @Test
+    void queuedWriterCannotReplaceLaterBlockingSave() {
+        var harness = plugin(tempDir, new PluginConfig.HomeSettings(3, Map.of()));
+        var manager = new HomeManager(harness.plugin());
+        var world = world("survival");
+        var player = player(world, new Location(world, 1, 70, 1));
+        var scheduler = mock(BukkitScheduler.class);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            manager.setHome(player, "Old");
+            manager.flushIfDirtyAsync();
+            var task = ArgumentCaptor.forClass(Runnable.class);
+            verify(scheduler).runTaskAsynchronously(eq(harness.plugin()), task.capture());
+            manager.setHome(player, "New");
+            manager.flushBlocking();
+            task.getValue().run();
+        }
+        assertEquals(2, new HomeManager(harness.plugin()).getHomeCount(PLAYER_ID));
+    }
+
+    @Test
+    void malformedHomesArePreservedBeforeAnyReplacement() throws IOException {
+        var harness = plugin(tempDir, new PluginConfig.HomeSettings(3, Map.of()));
+        var file = tempDir.resolve("homes.yml");
+        byte[] original = "existing: [broken".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        Files.write(file, original);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getLogger).thenReturn(java.util.logging.Logger.getAnonymousLogger());
+            var manager = new HomeManager(harness.plugin());
+            var world = world("survival");
+            manager.setHome(player(world, new Location(world, 1, 70, 1)), "New");
+            manager.flushBlocking();
+        }
+        try (var backups = Files.newDirectoryStream(tempDir, "homes-unreadable-*.yml")) {
+            var files = backups.iterator();
+            assertTrue(files.hasNext(), "original YAML must be backed up");
+            assertArrayEquals(original, Files.readAllBytes(files.next()));
+        }
+    }
+
+    @Test
+    void failedBlockingSaveSurvivesReloadAndRetries() throws IOException {
+        var harness = plugin(tempDir, new PluginConfig.HomeSettings(3, Map.of()));
+        var manager = new HomeManager(harness.plugin());
+        var file = tempDir.resolve("homes.yml");
+        Files.delete(file);
+        Files.createDirectory(file);
+        Files.writeString(file.resolve("occupied"), "keep");
+        var world = world("survival");
+        manager.setHome(player(world, new Location(world, 1, 70, 1)), "Pending");
+        manager.flushBlocking();
+        manager.reload();
+        assertNotNull(manager.getHome(PLAYER_ID, "Pending"));
+        Files.delete(file.resolve("occupied"));
+        Files.delete(file);
+        manager.flushBlocking();
+        assertNotNull(new HomeManager(harness.plugin()).getHome(PLAYER_ID, "Pending"));
+    }
+
+    @Test
+    void failedAsyncSaveRetriesWithoutAnotherPlayerEdit() throws IOException {
+        var harness = plugin(tempDir, new PluginConfig.HomeSettings(3, Map.of()));
+        when(harness.plugin().isEnabled()).thenReturn(true);
+        var manager = new HomeManager(harness.plugin());
+        var world = world("survival");
+        manager.setHome(player(world, new Location(world, 1, 70, 1)), "Pending");
+        var file = tempDir.resolve("homes.yml");
+        Files.delete(file);
+        Files.createDirectory(file);
+        Files.createFile(file.resolve("occupied"));
+        var scheduler = mock(BukkitScheduler.class);
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            manager.flushIfDirtyAsync();
+            var task = ArgumentCaptor.forClass(Runnable.class);
+            verify(scheduler).runTaskAsynchronously(eq(harness.plugin()), task.capture());
+            task.getValue().run();
+            verify(scheduler).runTask(eq(harness.plugin()), task.capture());
+            task.getValue().run();
+        }
+        verify(harness.monitor()).increment("yaml.homes.failed");
+        Files.delete(file.resolve("occupied"));
+        Files.delete(file);
+        manager.flushBlocking();
+        assertNotNull(new HomeManager(harness.plugin()).getHome(PLAYER_ID, "Pending"));
+    }
+
+    @Test
+    void legacyHomeRoundTripPreservesOwnerAndBedFile() throws IOException {
+        var harness = plugin(tempDir, new PluginConfig.HomeSettings(3, Map.of()));
+        var file = tempDir.resolve("homes.yml");
+        Files.writeString(file, PLAYER_ID + ":\n  base:\n    name: Base\n    world: survival\n"
+                + "    x: -1.25\n    y: 70.0\n    z: 42.5\n    yaw: 88.0\n    pitch: -4.5\n    created: 123456\n");
+        var beds = tempDir.resolve("beds.yml");
+        Files.writeString(beds, "beds:\n  " + PLAYER_ID + ":\n    bed:\n      name: bed\n      world: survival\n"
+                + "      bed-x: 1\n      bed-y: 70\n      bed-z: 2\nnotifications: {}\n");
+        Path importMarker = Files.createFile(tempDir.resolve("beds-vanilla-import-v1.done"));
+        byte[] originalBeds = Files.readAllBytes(beds);
+        var manager = new HomeManager(harness.plugin());
+        var world = world("survival");
+        manager.setHome(player(UUID.randomUUID(), world, new Location(world, 0, 64, 0)), "Base");
+        manager.flushBlocking();
+        manager.reload();
+        var home = manager.getHome(PLAYER_ID, "base");
+        assertEquals("Base", home.getName());
+        assertEquals("survival", home.getWorldName());
+        assertEquals(-1.25, home.getX());
+        assertEquals(70, home.getY());
+        assertEquals(42.5, home.getZ());
+        assertEquals(88, home.getYaw());
+        assertEquals(-4.5, home.getPitch());
+        assertEquals(123456, home.getCreatedAt());
+        assertArrayEquals(originalBeds, Files.readAllBytes(beds));
+        assertTrue(Files.exists(importMarker));
+        var bed = new BedHomeManager(harness.plugin()).getBed(PLAYER_ID, "bed");
+        assertEquals(PLAYER_ID, bed.getOwner());
+        assertEquals("survival", bed.getWorldName());
+        assertEquals(1, bed.getBedX());
+        assertEquals(70, bed.getBedY());
+        assertEquals(2, bed.getBedZ());
     }
 
     private static PluginHarness plugin(Path dataFolder, PluginConfig.HomeSettings settings) {

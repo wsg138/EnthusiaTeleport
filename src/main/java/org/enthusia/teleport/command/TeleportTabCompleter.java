@@ -54,6 +54,7 @@ public class TeleportTabCompleter implements TabCompleter {
             case "home" -> tabHome(sender, args);
             case "homes" -> tabHomes(sender, args);
             case "delhome" -> tabDelHome(sender, args);
+            case "spawn" -> tabSpawn(args);
             case "bed" -> tabBed(sender, args);
             case "tppos" -> tabTppos(args);
             case "tpo" -> tabOfflinePlayers(args);
@@ -66,6 +67,17 @@ public class TeleportTabCompleter implements TabCompleter {
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
+
+    private List<String> tabSpawn(String[] args) {
+        if (args.length == 1 && "respawn".startsWith(args[0].toLowerCase(Locale.ROOT))) {
+            return List.of("respawn");
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("respawn")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return List.of("bed", "spawn").stream().filter(mode -> mode.startsWith(prefix)).toList();
+        }
+        return List.of();
+    }
 
     private List<String> tabPlayers(String[] args, int argIndex) {
         if (args.length == NO_ARGUMENTS || args.length - 1 != argIndex) return Collections.emptyList();
@@ -133,10 +145,37 @@ public class TeleportTabCompleter implements TabCompleter {
     }
 
     private List<String> tabHomes(CommandSender sender, String[] args) {
-        if (args.length != FIRST_ARGUMENT || !sender.hasPermission("enthusia.teleport.admin.homes.view")) {
-            return Collections.emptyList();
+        if (!(sender instanceof Player player) || args.length == 0) {
+            return List.of();
         }
-        return plugin.getOfflineNameCache().suggest(args[0].toLowerCase(Locale.ROOT), false);
+        boolean first = args.length == FIRST_ARGUMENT;
+        boolean explicitBed = args.length == SECOND_ARGUMENT && ignoresEqualCase(args[0], "bed");
+        if (args.length == SECOND_ARGUMENT && ignoresEqualCase(args[0], "anchor")
+                && plugin.getAnchorHomes().available(player).isPresent()) {
+            return filterOptions(List.of("respawn"), args[1].toLowerCase(Locale.ROOT));
+        }
+        if (!first && !explicitBed) {
+            return List.of();
+        }
+        String prefix = args[args.length - 1].toLowerCase(Locale.ROOT);
+        var names = new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        if (first) {
+            plugin.getHomeManager().getHomes(player.getUniqueId()).forEach(home -> names.add(home.getName()));
+        }
+        if (player.hasPermission("enthusia.teleport.bed")) {
+            for (BedHome bed : plugin.getBedHomeManager().getBeds(player.getUniqueId())) {
+                if (!names.add(bed.getName()) && first) {
+                    names.add("bed"); // /homes bed <name> selects a bed sharing a regular home's name.
+                }
+            }
+        }
+        if (first && "anchor".startsWith(prefix) && plugin.getAnchorHomes().available(player).isPresent()) {
+            names.add("anchor");
+        }
+        if (first && player.hasPermission("enthusia.teleport.admin.homes.view")) {
+            names.addAll(plugin.getOfflineNameCache().suggest(prefix, false));
+        }
+        return names.stream().filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();
     }
 
     private List<String> tabDelHome(CommandSender sender, String[] args) {

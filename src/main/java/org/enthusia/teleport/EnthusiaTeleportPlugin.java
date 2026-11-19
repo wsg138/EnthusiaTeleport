@@ -47,6 +47,12 @@ import java.io.File;
 
 public class EnthusiaTeleportPlugin extends JavaPlugin {
 
+    private final org.enthusia.teleport.home.AnchorHomeManager anchorHomes = new org.enthusia.teleport.home.AnchorHomeManager(this);
+
+    public org.enthusia.teleport.home.AnchorHomeManager getAnchorHomes() {
+        return anchorHomes;
+    }
+
     private static EnthusiaTeleportPlugin instance;
 
     private PluginConfigManager pluginConfigManager;
@@ -55,6 +61,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     private IgnoreManager ignoreManager;
     private HomeManager homeManager;
     private BedHomeManager bedHomeManager;
+    private BedCommand bedCommand;
     private BackManager backManager;
     private TeleportManager teleportManager;
     private TeleportRequestManager requestManager;
@@ -133,6 +140,9 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
     }
 
     public void reloadPlugin() {
+        if (!homeManager.reloadSafely()) {
+            throw new IllegalStateException("Reload stopped while saving or reading homes.yml. Current homes remain in memory.");
+        }
         newcomerRtpNotice.clear();
         saveAllDataBlocking();
         adminLogManager.flushBlocking();
@@ -142,7 +152,6 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         pluginConfigManager.reload();
         messages.reload();
         ignoreManager.reload();
-        homeManager.reload();
         // beds.yml is live runtime state, not configuration. Keeping the same manager generation
         // across /eteleport reload also prevents an older asynchronous save callback from being
         // applied to freshly reset persistence counters and lets the one-time vanilla import finish.
@@ -225,7 +234,8 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         getCommand("delhome").setExecutor(new DelHomeCommand(this));
         getCommand("delhome").setTabCompleter(tabCompleter);
 
-        getCommand("bed").setExecutor(new BedCommand(this));
+        bedCommand = new BedCommand(this);
+        getCommand("bed").setExecutor(bedCommand);
         getCommand("bed").setTabCompleter(tabCompleter);
 
         getCommand("spawn").setExecutor(new SpawnCommand(this));
@@ -266,6 +276,7 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(combatManager, this);
         Bukkit.getPluginManager().registerEvents(homeGuiManager, this);
         Bukkit.getPluginManager().registerEvents(bedHomeManager, this);
+        Bukkit.getPluginManager().registerEvents(anchorHomes, this);
         Bukkit.getPluginManager().registerEvents(inventoryViewCommand, this);
         Bukkit.getPluginManager().registerEvents(spawnManager, this);
         Bukkit.getPluginManager().registerEvents(lastLocationManager, this);
@@ -291,6 +302,10 @@ public class EnthusiaTeleportPlugin extends JavaPlugin {
 
     public HomeManager getHomeManager() {
         return homeManager;
+    }
+
+    public BedCommand getBedCommand() {
+        return bedCommand;
     }
 
     public BedHomeManager getBedHomeManager() {

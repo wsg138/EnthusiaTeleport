@@ -79,13 +79,35 @@ public class HomeCommand implements CommandExecutor {
             return;
         }
 
+        if (args.length == 2 && ignoresEqualCase(args[0], "anchor") && ignoresEqualCase(args[1], "respawn")) {
+            plugin.getAnchorHomes().teleport(player);
+            return;
+        }
+        if (args.length == 2 && ignoresEqualCase(args[0], "bed")) {
+            plugin.getBedCommand().teleportNamedBed(player, args[1]);
+            return;
+        }
         if (args.length != 1) {
-            msg.send(player, "admin.homes.view-usage");
+            msg.send(player, "home.destinations-usage");
             return;
         }
 
+        String name = args[0];
+        if (plugin.getHomeManager().getHome(player.getUniqueId(), name) != null) {
+            plugin.getHomeGuiManager().teleportToHome(player, name, false);
+            return;
+        }
+        if (player.hasPermission("enthusia.teleport.bed")
+                && plugin.getBedHomeManager().getBed(player.getUniqueId(), name) != null) {
+            plugin.getBedCommand().teleportNamedBed(player, name);
+            return;
+        }
+        if (ignoresEqualCase(name, "anchor") && plugin.getAnchorHomes().available(player).isPresent()) {
+            plugin.getAnchorHomes().teleport(player);
+            return;
+        }
         if (!player.hasPermission("enthusia.teleport.admin.homes.view")) {
-            msg.send(player, "generic.no-permission");
+            msg.send(player, "home.unknown", Map.of("name", name));
             return;
         }
 

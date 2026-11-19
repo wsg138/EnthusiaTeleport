@@ -2,6 +2,7 @@ package org.enthusia.teleport.home;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.enthusia.teleport.EnthusiaTeleportPlugin;
@@ -9,7 +10,9 @@ import org.enthusia.teleport.config.PluginConfig;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -31,17 +34,29 @@ public final class HomeManager {
     private final EnthusiaTeleportPlugin plugin;
     private final File file;
     private final Map<UUID, Map<String, Home>> homes = new ConcurrentHashMap<>();
+    private final Object writeLock = new Object();
+    // Issued on the server thread. A blocking flush supersedes all older workers and callbacks.
+    private volatile long latestWrite;
+    private boolean preserveOriginal;
     private boolean dirty;
     private boolean saveInProgress;
 
     public HomeManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "homes.yml");
-        load();
+        if (!load()) {
+            throw new IllegalStateException("Cannot safely open homes.yml. See the server log.");
+        }
     }
 
     public void reload() {
-        load();
+        if (!reloadSafely()) {
+            plugin.getLogger().warning("Home reload skipped. Current homes are still in memory.");
+        }
+    }
+
+    public boolean reloadSafely() {
+        return flushCurrentHomes() && load();
     }
 
     public void saveAll() {
@@ -59,33 +74,80 @@ public final class HomeManager {
             return;
         }
         Map<UUID, Map<String, Home>> snapshot = snapshot();
+        long request = ++latestWrite;
         dirty = false;
         saveInProgress = true;
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            boolean success = writeSnapshot(snapshot);
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                saveInProgress = false;
-                plugin.getPerformanceMonitor().increment(success ? "yaml.homes.flushed" : "yaml.homes.failed");
-                if (dirty) {
-                    flushIfDirtyAsync();
-                }
-            });
+            boolean success = persist(request, snapshot);
+            if (request == latestWrite && plugin.isEnabled()) {
+                Bukkit.getScheduler().runTask(plugin, () -> finishAsync(request, success));
+            }
         });
     }
 
-    public void flushBlocking() {
-        if (!dirty && !saveInProgress) {
-            plugin.getPerformanceMonitor().increment("yaml.homes.skipped");
+    private void finishAsync(long request, boolean success) {
+        if (request != latestWrite) {
             return;
         }
-        Map<UUID, Map<String, Home>> snapshot = snapshot();
-        dirty = false;
-        writeSnapshot(snapshot);
         saveInProgress = false;
-        plugin.getPerformanceMonitor().increment("yaml.homes.flushed");
+        dirty |= !success;
+        plugin.getPerformanceMonitor().increment(success ? "yaml.homes.flushed" : "yaml.homes.failed");
+        if (success && dirty) {
+            flushIfDirtyAsync();
+        }
     }
 
-    private boolean writeSnapshot(Map<UUID, Map<String, Home>> snapshot) {
+    public void flushBlocking() {
+        flushCurrentHomes();
+    }
+
+    private boolean flushCurrentHomes() {
+        if (!dirty && !saveInProgress) {
+            plugin.getPerformanceMonitor().increment("yaml.homes.skipped");
+            return true;
+        }
+        boolean success = persist(++latestWrite, snapshot());
+        dirty = !success;
+        saveInProgress = false;
+        plugin.getPerformanceMonitor().increment(success ? "yaml.homes.flushed" : "yaml.homes.failed");
+        return success;
+    }
+
+    private boolean persist(long request, Map<UUID, Map<String, Home>> snapshot) {
+        synchronized (writeLock) {
+            if (request != latestWrite) {
+                return false;
+            }
+            Path temporary = null;
+            try {
+                if (preserveOriginal) {
+                    backupUnreadableHomesFile();
+                }
+                temporary = Files.createTempFile(file.getParentFile().toPath(), "homes-", ".tmp");
+                serialize(snapshot).save(temporary.toFile());
+                try {
+                    Files.move(temporary, file.toPath(), StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException unsupported) {
+                    Files.move(temporary, file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+                return true;
+            } catch (IOException exception) {
+                plugin.getLogger().warning("Failed to save homes.yml: " + exception.getMessage());
+                return false;
+            } finally {
+                if (temporary != null) {
+                    try {
+                        Files.deleteIfExists(temporary);
+                    } catch (IOException cleanupFailure) {
+                        plugin.getLogger().warning("Failed to clean up " + temporary + ": " + cleanupFailure.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    private YamlConfiguration serialize(Map<UUID, Map<String, Home>> snapshot) {
         YamlConfiguration config = new YamlConfiguration();
         for (Map.Entry<UUID, Map<String, Home>> entry : snapshot.entrySet()) {
             if (entry.getValue().isEmpty()) {
@@ -106,14 +168,7 @@ public final class HomeManager {
             }
         }
 
-        try {
-            file.getParentFile().mkdirs();
-            config.save(file);
-            return true;
-        } catch (IOException exception) {
-            plugin.getLogger().warning("Failed to save homes.yml: " + exception.getMessage());
-            return false;
-        }
+        return config;
     }
 
     public Collection<Home> getHomes(UUID owner) {
@@ -183,14 +238,36 @@ public final class HomeManager {
         return getHomeCount(player.getUniqueId()) > getHomeLimit(player);
     }
 
-    private void load() {
-        homes.clear();
-        ensureHomesFileExists();
-
-        YamlConfiguration config = loadHomesConfiguration();
-        if (config == null) {
-            return;
+    private boolean load() {
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            Files.createDirectories(file.getParentFile().toPath());
+            if (Files.notExists(file.toPath())) {
+                Files.createFile(file.toPath());
+                dirty = !homes.isEmpty();
+                preserveOriginal = false;
+                return true;
+            }
+            config.load(file);
+        } catch (InvalidConfigurationException malformed) {
+            preserveOriginal = true;
+            try {
+                backupUnreadableHomesFile();
+            } catch (IOException backupFailure) {
+                plugin.getLogger().severe("Cannot preserve malformed homes.yml: " + backupFailure.getMessage());
+                return false;
+            }
+            // On hot reload keep the last known good state. On first startup it is empty.
+            dirty = !homes.isEmpty();
+            return true;
+        } catch (IOException failure) {
+            preserveOriginal = true;
+            plugin.getLogger().severe("Cannot read homes.yml: " + failure.getMessage());
+            return false;
         }
+
+        preserveOriginal = false;
+        homes.clear();
         boolean repaired = false;
 
         for (String key : config.getKeys(false)) {
@@ -211,31 +288,8 @@ public final class HomeManager {
             }
         }
 
-        if (repaired) {
-            writeSnapshot(snapshot());
-            this.dirty = false;
-        }
-    }
-
-    private void ensureHomesFileExists() {
-        if (!file.exists()) {
-            try {
-                file.getParentFile().mkdirs();
-                file.createNewFile();
-            } catch (IOException ignored) {
-            }
-        }
-    }
-
-    private YamlConfiguration loadHomesConfiguration() {
-        try {
-            return YamlConfiguration.loadConfiguration(file);
-        } catch (RuntimeException exception) {
-            File backup = backupUnreadableHomesFile();
-            plugin.getLogger().severe("Could not load homes.yml, so homes were left empty for this startup. "
-                    + "The unreadable file was moved to " + backup.getName() + ". Cause: " + exception.getMessage());
-            return null;
-        }
+        dirty = repaired;
+        return !repaired || flushCurrentHomes();
     }
 
     private UUID parseOwnerId(String key) {
@@ -316,7 +370,7 @@ public final class HomeManager {
         return copy;
     }
 
-    private File backupUnreadableHomesFile() {
+    private void backupUnreadableHomesFile() throws IOException {
         String timestamp = LocalDateTime.now().format(BACKUP_TIMESTAMP).replace(':', '-');
         File backup = new File(file.getParentFile(), "homes-unreadable-" + timestamp + ".yml");
         int suffix = 1;
@@ -325,14 +379,12 @@ public final class HomeManager {
             suffix++;
         }
 
-        try {
-            file.getParentFile().mkdirs();
-            Files.move(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            file.createNewFile();
-        } catch (IOException exception) {
-            plugin.getLogger().severe("Failed to move unreadable homes.yml: " + exception.getMessage());
+        if (!Files.isRegularFile(file.toPath())) {
+            throw new IOException("Cannot back up homes.yml as a regular file.");
         }
-        return backup;
+        Files.copy(file.toPath(), backup.toPath());
+        preserveOriginal = false;
+        plugin.getLogger().warning("Preserved unreadable homes.yml in " + backup.getName());
     }
 
     private String normalizeName(String name) {

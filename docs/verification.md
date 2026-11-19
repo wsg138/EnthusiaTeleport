@@ -47,3 +47,68 @@ Trusted same-repository validation at head `1ae8a8f378a839b83113995640c1414ce9f2
 Codacy on dd254f4 reported two time-format numeric conditional warnings and duplicate permission/warzone test strings. Named constants preserve identical arithmetic, display text, permission and region values. Existing behavioral tests provide regression coverage; no new behavioral requirement or historical red test is claimed for constant extraction. Maven 3.9.11/JDK 23 clean verify passes 41 tests with zero failures/errors/skips (codacy-four-verify.log). git diff --check passed. That worker-local artifact hash is historical only and is not canonical release provenance.
 
 At that historical fork head, GitHub-hosted jobs required approval and did not execute. This limitation is superseded by the 2026-10-07 same-repository validation above; no success is claimed for those blocked fork runs.
+
+## Bed-first death respawns (1.2.11)
+
+A player with an active, usable Minecraft bed should respawn there by default.
+A player can select server spawn and later restore bed respawns. A missing or
+obstructed bed uses configured spawn. Existing named bed homes, regular homes
+and the completed import marker must survive the change.
+
+The implementation keeps Paper's validated death destination when it is a bed,
+and uses the existing spawn resolver for fallback. The opt-out and one-time
+join tip use namespaced player data. The command never writes the bed/home
+stores or changes the player's vanilla spawn point. The existing global
+respawn override remains the operator control.
+
+Before implementation the valid-bed regression failed because the listener
+replaced the event location. The no-bed fallback control passed. Java 21
+Maven clean verify subsequently passed 69 tests, including preference
+commands, missing beds, the global override and existing persistence tests.
+Live checks were read-only. In-game death, restart and join-message acceptance
+remain pending.
+
+## 1.2.12 home persistence audit fixes
+
+The three regression cases failed on the previous implementation. A delayed
+async save removed the second home, malformed YAML had no backup, and reload
+lost the in-memory home after a failed write. The existing-format fixture
+passed before the changes.
+
+The home writer now serializes file replacement and discards superseded
+requests and callbacks. Failed writes stay pending. Reload checks home
+persistence before changing the rest of the plugin state. Strict YAML
+loading preserves malformed input in a separate backup before replacement.
+
+Java 21 Maven clean verify passed 74 tests with zero failures, errors or
+skips. The tests cover both blocking and asynchronous write failure, preserve
+existing home fields and owner identity across a save and reload, and verify
+the existing bed file bytes, bed lookup and completed import marker. Tests
+used temporary fixture files. Production installation and in-game acceptance
+remain pending.
+
+## 1.2.13 personal homes menu and completion
+
+Two pre-change command tests reproduced empty personal suggestions and the
+admin-only handling of a named personal destination. The updated tests cover
+case-insensitive completion, bed permission filtering, named home and bed
+dispatch, the explicit bed selector, and opening and clicking a bed-only menu.
+Java 21 Maven clean verify passed 78 tests. The change reads existing homes and
+beds through their managers. No storage changes or migration are required.
+
+## 1.2.14 independent anchor home
+
+A successful charged respawn-anchor binding records one personal anchor in
+player persistent data. A later bed binding leaves that anchor available.
+The active vanilla respawn block controls death unless the player opts into
+server spawn. Named homes and bed homes keep their existing formats and limits.
+
+The 1.2.13 baseline failed the anchor death regression. All 82 tests passed
+under Java 21 on the 1.2.14 build. Coverage includes three distinct inventory
+icons, click dispatch, tab and command name collisions, charge validation,
+and independent anchor storage. The test server reported 1.2.14 after restart.
+FainNeito bound a four-charge Nether anchor on SMP test. The homes menu
+showed the named home, bed and anchor together. Clicking the anchor and
+executing the tab-completed command from the Overworld both returned the
+player to the anchor with four charges remaining. After death in the
+Overworld, the player respawned beside the anchor with three charges left.

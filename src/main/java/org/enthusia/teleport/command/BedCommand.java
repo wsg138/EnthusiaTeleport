@@ -4,6 +4,8 @@ import com.destroystokyo.paper.event.player.PlayerSetSpawnEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Bed;
 import org.bukkit.command.Command;
@@ -39,6 +41,7 @@ import java.util.UUID;
  */
 public class BedCommand implements CommandExecutor, Listener {
 
+    private static final NamespacedKey BED_TIP_SEEN = new NamespacedKey("enthusiateleport", "bed_tip_seen");
     private static final int BED_ITEMS_PER_PAGE = 45;
     private static final int PREVIOUS_PAGE_SLOT = 45;
     private static final int INFO_SLOT = 49;
@@ -71,6 +74,7 @@ public class BedCommand implements CommandExecutor, Listener {
             BedHome mostRecent = beds.getMostRecentBed(player.getUniqueId());
             if (mostRecent == null) {
                 sendOrFallback(msg, player, "bed.not-set", "&cYou do not have a bed home set.");
+                msg.send(player, "bed.setup-tip");
                 return true;
             }
             teleportToBed(player, mostRecent);
@@ -133,8 +137,18 @@ public class BedCommand implements CommandExecutor, Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline() && isOverLimit(player)) {
+            if (!player.isOnline()) {
+                return;
+            }
+            if (isOverLimit(player)) {
                 sendOverLimit(player);
+            } else if (player.hasPermission("enthusia.teleport.bed")
+                    && !player.getPersistentDataContainer().has(BED_TIP_SEEN, PersistentDataType.BYTE)) {
+                plugin.getMessages().send(player, "bed.setup-tip");
+                if (plugin.getPluginConfigManager().current().spawn().respawnOverrideEnabled()) {
+                    plugin.getMessages().send(player, "respawn.help");
+                }
+                player.getPersistentDataContainer().set(BED_TIP_SEEN, PersistentDataType.BYTE, (byte) 1);
             }
         }, 20L);
     }
@@ -175,7 +189,11 @@ public class BedCommand implements CommandExecutor, Listener {
         }
     }
 
-    private boolean teleportNamedBed(Player player, String name) {
+    public boolean teleportNamedBed(Player player, String name) {
+        if (!player.hasPermission("enthusia.teleport.bed")) {
+            plugin.getMessages().send(player, "generic.no-permission");
+            return true;
+        }
         if (isOverLimit(player)) {
             sendOverLimit(player);
             return true;
@@ -309,6 +327,8 @@ public class BedCommand implements CommandExecutor, Listener {
     }
 
     private boolean showUsage(Player player) {
+        plugin.getMessages().send(player, "bed.setup-tip");
+        plugin.getMessages().send(player, "respawn.help");
         player.sendMessage(plugin.getMessages().color("&e/bed &7- teleport to your saved bed"));
         player.sendMessage(plugin.getMessages().color("&e/bed <name> &7- teleport to a named legacy bed"));
         player.sendMessage(plugin.getMessages().color("&e/bed list &7- list saved beds and coordinates"));

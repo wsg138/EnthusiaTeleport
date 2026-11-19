@@ -79,7 +79,7 @@ spawn:
           amount: 1
 
   respawn:
-    # If true, respawns are forced to the plugin spawn location.
+    # If true, deaths use a valid active bed or respawn anchor by default, with configured spawn as fallback or player choice.
     override-to-configured-spawn: true
 
 rtp:

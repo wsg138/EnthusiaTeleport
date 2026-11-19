@@ -137,3 +137,12 @@ top.teleported: "&aTeleported to the highest block above you."
 
 performance.header: "&8[&bEnthusiaTeleport&8] &7Performance counters:"
 performance.line: "&7{key}: &e{value}"
+
+bed.setup-tip: "&eBed home &7— Use a bed to set your home, then type &f/bed &7to return."
+respawn.help: "&7Prefer to respawn at server spawn after death? Use &f/spawn respawn spawn&7. Switch back with &f/spawn respawn bed&7."
+respawn.spawn: "&aYour death respawn is set to server spawn. &7Use /spawn respawn bed to switch back."
+respawn.bed: "&aYour death respawn is set to your active bed or charged respawn anchor. &7If it is missing or blocked, you return to server spawn."
+respawn.disabled: "&7This server uses its own respawn rules. Personal respawn preferences are disabled."
+
+home.destinations-usage: "&7Use /homes <name> or /homes bed <bed name>."
+anchor.unavailable: "&cYour respawn anchor is missing, out of charges, or blocked."

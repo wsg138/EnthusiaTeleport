@@ -3,6 +3,8 @@ package org.enthusia.teleport.spawn;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,7 +21,21 @@ import java.util.Locale;
 
 public class SpawnManager implements Listener {
 
+    private static final NamespacedKey SPAWN_PREFERENCE =
+            new NamespacedKey("enthusiateleport", "respawn_at_spawn");
     private final EnthusiaTeleportPlugin plugin;
+
+    public boolean prefersServerSpawn(Player player) {
+        return player.getPersistentDataContainer().has(SPAWN_PREFERENCE, PersistentDataType.BYTE);
+    }
+
+    public void setServerSpawnPreference(Player player, boolean useSpawn) {
+        if (useSpawn) {
+            player.getPersistentDataContainer().set(SPAWN_PREFERENCE, PersistentDataType.BYTE, (byte) 1);
+        } else {
+            player.getPersistentDataContainer().remove(SPAWN_PREFERENCE);
+        }
+    }
 
     public SpawnManager(EnthusiaTeleportPlugin plugin) {
         this.plugin = plugin;
@@ -47,6 +63,13 @@ public class SpawnManager implements Listener {
     @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
         if (!plugin.getPluginConfigManager().current().spawn().respawnOverrideEnabled()) {
+            return;
+        }
+
+        if (event.getRespawnReason() == PlayerRespawnEvent.RespawnReason.DEATH
+                && (event.isBedSpawn() || event.isAnchorSpawn()) && !event.isMissingRespawnBlock()
+                && !prefersServerSpawn(event.getPlayer())) {
+            // Paper has already found a safe place beside the player's active respawn block.
             return;
         }
 
